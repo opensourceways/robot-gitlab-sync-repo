@@ -2,8 +2,12 @@ package main
 
 import (
 	"errors"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
 type syncCommit struct {
@@ -24,6 +28,7 @@ type syncService struct {
 	obs           *syncToOBS
 	workDir       string
 	isFirstCommit func(string, string) (bool, error)
+	commitFileSh  string
 }
 
 func (s syncService) sync(commit syncCommit) error {
@@ -55,20 +60,22 @@ func (s syncService) sync(commit syncCommit) error {
 }
 
 func (s syncService) doSync(commit *syncCommit) error {
-	// TODO gen tmp dir
-	dir := ""
-
-	defer os.RemoveAll(dir)
-
-	smalls, lfsSHA, err := s.getCommitFile(dir, commit)
+	dir, err := ioutil.TempDir(s.workDir, "sync")
 	if err != nil {
 		return err
 	}
 
-	if len(smalls) > 0 {
-		err := s.obs.syncSmallFiles(
-			filepath.Join(dir, commit.repoName),
-			smalls, commit.repoPath(),
+	defer os.RemoveAll(dir)
+
+	smallFile, lfsFile, err := s.getCommitFile(dir, commit)
+	if err != nil {
+		return err
+	}
+
+	if smallFile != "" {
+		err := s.syncSmallFiles(
+			smallFile, filepath.Join(dir, commit.repoName),
+			commit.repoPath(),
 		)
 
 		if err != nil {
@@ -76,8 +83,8 @@ func (s syncService) doSync(commit *syncCommit) error {
 		}
 	}
 
-	if len(lfsSHA) > 0 {
-		err := s.obs.syncLFSFiles(lfsSHA, commit.repoPath())
+	if lfsFile != "" {
+		err := s.syncLFSFiles(lfsFile, commit.repoPath())
 		if err != nil {
 			return err
 		}
@@ -86,15 +93,48 @@ func (s syncService) doSync(commit *syncCommit) error {
 	return nil
 }
 
+func (s syncService) syncSmallFiles(file, repoDir, obsPath string) error {
+	return utils.ReadFileLineByLine(file, func(line string) bool {
+		if err := s.obs.syncSmallFile(repoDir, file, obsPath); err != nil {
+			return true
+		}
+
+		return false
+	})
+}
+
+func (s syncService) syncLFSFiles(file, obsPath string) error {
+	return utils.ReadFileLineByLine(file, func(line string) bool {
+		v := strings.Split(line, ":oid sha256:")
+		if err := s.obs.syncLFSFile(v[0], v[1], obsPath); err != nil {
+			return true
+		}
+
+		return false
+	})
+}
+
 func (s syncService) getCommitFile(dir string, commit *syncCommit) (
-	smalls []string, lfsSHA map[string]string, err error,
+	smallFile string, lfsFile string, err error,
 ) {
-	/*
-		work_dir=$1
-		repo_url=$2
-		repo_name=$3
-		commit=$4
-	*/
+	v, err, _ := utils.RunCmd(
+		s.commitFileSh, dir, commit.repoURL,
+		commit.repoName, commit.commit,
+	)
+
+	if err != nil {
+		return
+	}
+
+	r := strings.Split(string(v), ", ")
+
+	if r[1] == "yes" {
+		smallFile = r[0]
+	}
+
+	if r[3] == "yes" {
+		lfsFile = r[2]
+	}
 
 	return
 }

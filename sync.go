@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
+
+	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
 type syncToOBS struct {
@@ -24,7 +27,7 @@ func (s *syncToOBS) syncSmallFiles(repoDir string, files []string, targetDir str
 
 	for _, f := range files {
 		err := s.retry(func() error {
-			return s.createOBSObject(
+			return s.uploadFileToOBS(
 				filepath.Join(repoDir, f),
 				filepath.Join(s.repoDir, targetDir, f),
 			)
@@ -35,6 +38,16 @@ func (s *syncToOBS) syncSmallFiles(repoDir string, files []string, targetDir str
 	}
 
 	return nil
+}
+
+// targetDir: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) syncSmallFile(repoDir string, file string, targetDir string) error {
+	return s.retry(func() error {
+		return s.uploadFileToOBS(
+			filepath.Join(repoDir, file),
+			filepath.Join(s.repoDir, targetDir, file),
+		)
+	})
 }
 
 // targetDir: user/[project,model,dataset]/repo_id
@@ -55,10 +68,17 @@ func (s *syncToOBS) syncLFSFiles(fileSha map[string]string, targetDir string) er
 	return nil
 }
 
+// targetDir: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) syncLFSFile(file string, sha string, targetDir string) error {
+	return s.retry(func() error {
+		return s.copyOBSObject(sha, filepath.Join(s.repoDir, targetDir, file))
+	})
+}
+
 // p: user/[project,model,dataset]/repo_id
-func (s *syncToOBS) getCurrentCommit(p string) (d []byte, available bool, err error) {
+func (s *syncToOBS) getCurrentCommit(p string) (d []byte, unavailable bool, err error) {
 	s.retry(func() error {
-		d, available, err = s.getOBSObject(
+		d, unavailable, err = s.getOBSObject(
 			filepath.Join(s.repoDir, p, s.currentCommitFile),
 		)
 
@@ -96,7 +116,7 @@ func (s *syncToOBS) retry(f func() error) (err error) {
 	return
 }
 
-func (s *syncToOBS) createOBSObject(from, to string) error {
+func (s *syncToOBS) uploadFileToOBS(from, to string) error {
 	f, err := os.Open(from)
 	if err != nil {
 		return err
@@ -104,10 +124,20 @@ func (s *syncToOBS) createOBSObject(from, to string) error {
 
 	defer f.Close()
 
+	md5, err := utils.GenMd5OfByteStream(f)
+	if err != nil {
+		return err
+	}
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
 	input := &obs.PutObjectInput{}
 	input.Bucket = s.bucketName
 	input.Key = to
 	input.Body = f
+	input.ContentMD5 = md5
 
 	_, err = s.obsClient.PutObject(input)
 
@@ -119,6 +149,7 @@ func (s *syncToOBS) saveToOBS(to, content string) error {
 	input.Bucket = s.bucketName
 	input.Key = to
 	input.Body = strings.NewReader(content)
+	input.ContentMD5 = utils.GenMD5([]byte(content))
 
 	_, err := s.obsClient.PutObject(input)
 
