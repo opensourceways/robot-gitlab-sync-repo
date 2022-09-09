@@ -1,28 +1,32 @@
 package main
 
 import (
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 )
 
 type syncToOBS struct {
-	obsClient  *obs.ObsClient
-	bucketName string
-	lfsDir     string
+	obsClient         *obs.ObsClient
+	bucketName        string
+	lfsDir            string
+	repoDir           string
+	currentCommitFile string // config
 }
 
-// targetDir: xihe-obj/user/[project,model,dataset]/repo_id
-func (s syncToOBS) syncSmallFiles(repoDir string, files []string, targetDir string) error {
+// targetDir: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) syncSmallFiles(repoDir string, files []string, targetDir string) error {
 	// TODO need do concurrently?
 
 	for _, f := range files {
 		err := s.retry(func() error {
 			return s.createOBSObject(
 				filepath.Join(repoDir, f),
-				filepath.Join(targetDir, f),
+				filepath.Join(s.repoDir, targetDir, f),
 			)
 		})
 		if err != nil {
@@ -33,13 +37,13 @@ func (s syncToOBS) syncSmallFiles(repoDir string, files []string, targetDir stri
 	return nil
 }
 
-// targetDir: xihe-obj/user/[project,model,dataset]/repo_id
-func (s syncToOBS) syncLFSFiles(fileSha map[string]string, targetDir string) error {
+// targetDir: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) syncLFSFiles(fileSha map[string]string, targetDir string) error {
 	// TODO need do concurrently?
 
 	for f, sha := range fileSha {
 		err := s.retry(func() error {
-			return s.copyOBSObject(sha, filepath.Join(targetDir, f))
+			return s.copyOBSObject(sha, filepath.Join(s.repoDir, targetDir, f))
 		})
 
 		if err != nil {
@@ -51,7 +55,30 @@ func (s syncToOBS) syncLFSFiles(fileSha map[string]string, targetDir string) err
 	return nil
 }
 
-func (s syncToOBS) retry(f func() error) (err error) {
+// p: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) getCurrentCommit(p string) (d []byte, available bool, err error) {
+	s.retry(func() error {
+		d, available, err = s.getOBSObject(
+			filepath.Join(s.repoDir, p, s.currentCommitFile),
+		)
+
+		return err
+	})
+
+	return
+}
+
+// p: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) updateCurrentCommit(p, commit string) error {
+	return s.retry(func() error {
+		return s.saveToOBS(
+			filepath.Join(s.repoDir, p, s.currentCommitFile),
+			commit,
+		)
+	})
+}
+
+func (s *syncToOBS) retry(f func() error) (err error) {
 	if err = f(); err == nil {
 		return
 	}
@@ -69,7 +96,7 @@ func (s syncToOBS) retry(f func() error) (err error) {
 	return
 }
 
-func (s syncToOBS) createOBSObject(from, to string) error {
+func (s *syncToOBS) createOBSObject(from, to string) error {
 	f, err := os.Open(from)
 	if err != nil {
 		return err
@@ -87,7 +114,18 @@ func (s syncToOBS) createOBSObject(from, to string) error {
 	return err
 }
 
-func (s syncToOBS) copyOBSObject(sha, to string) error {
+func (s *syncToOBS) saveToOBS(to, content string) error {
+	input := &obs.PutObjectInput{}
+	input.Bucket = s.bucketName
+	input.Key = to
+	input.Body = strings.NewReader(content)
+
+	_, err := s.obsClient.PutObject(input)
+
+	return err
+}
+
+func (s *syncToOBS) copyOBSObject(sha, to string) error {
 	input := &obs.CopyObjectInput{}
 	input.Bucket = s.bucketName
 	input.Key = to
@@ -97,4 +135,25 @@ func (s syncToOBS) copyOBSObject(sha, to string) error {
 	_, err := s.obsClient.CopyObject(input)
 
 	return err
+}
+
+func (s *syncToOBS) getOBSObject(p string) ([]byte, bool, error) {
+	input := &obs.GetObjectInput{}
+	input.Bucket = s.bucketName
+	input.Key = p
+
+	output, err := s.obsClient.GetObject(input)
+	if err != nil {
+		if v, ok := err.(obs.ObsError); ok && v.BaseModel.StatusCode == 404 {
+			return nil, true, nil
+		}
+
+		return nil, false, err
+	}
+
+	defer output.Body.Close()
+
+	v, err := ioutil.ReadAll(output.Body)
+
+	return v, false, err
 }
