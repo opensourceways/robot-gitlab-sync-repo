@@ -20,7 +20,7 @@ type syncCommit struct {
 	parentCommit string
 }
 
-func (s syncCommit) repoPath() string {
+func (s *syncCommit) repoOBSPath() string {
 	return filepath.Join(s.owner, s.repoType, s.repoId)
 }
 
@@ -32,7 +32,7 @@ type syncService struct {
 }
 
 func (s syncService) sync(commit syncCommit) error {
-	v, unavailable, err := s.obs.getCurrentCommit(commit.repoPath())
+	v, unavailable, err := s.obs.getCurrentCommit(commit.repoOBSPath())
 	if err != nil {
 		return err
 	}
@@ -56,35 +56,34 @@ func (s syncService) sync(commit syncCommit) error {
 		return err
 	}
 
-	return s.obs.updateCurrentCommit(commit.repoPath(), commit.commit)
+	return s.obs.updateCurrentCommit(commit.repoOBSPath(), commit.commit)
 }
 
 func (s syncService) doSync(commit *syncCommit) error {
-	dir, err := ioutil.TempDir(s.workDir, "sync")
+	tempDir, err := ioutil.TempDir(s.workDir, "sync")
 	if err != nil {
 		return err
 	}
 
-	defer os.RemoveAll(dir)
+	defer os.RemoveAll(tempDir)
 
-	smallFile, lfsFile, err := s.getCommitFile(dir, commit)
+	smallFile, lfsFile, err := s.getCommitFile(tempDir, commit)
 	if err != nil {
 		return err
 	}
 
 	if smallFile != "" {
 		err := s.syncSmallFiles(
-			smallFile, filepath.Join(dir, commit.repoName),
-			commit.repoPath(),
+			smallFile, filepath.Join(tempDir, commit.repoName),
+			commit.repoOBSPath(),
 		)
-
 		if err != nil {
 			return err
 		}
 	}
 
 	if lfsFile != "" {
-		err := s.syncLFSFiles(lfsFile, commit.repoPath())
+		err := s.syncLFSFiles(lfsFile, commit.repoOBSPath())
 		if err != nil {
 			return err
 		}
@@ -93,9 +92,12 @@ func (s syncService) doSync(commit *syncCommit) error {
 	return nil
 }
 
-func (s syncService) syncSmallFiles(file, repoDir, obsPath string) error {
-	return utils.ReadFileLineByLine(file, func(line string) bool {
-		if err := s.obs.syncSmallFile(repoDir, file, obsPath); err != nil {
+func (s syncService) syncSmallFiles(smallFiles, repoDir, obsPath string) error {
+	return utils.ReadFileLineByLine(smallFiles, func(line string) bool {
+		src := filepath.Join(repoDir, line)
+		dst := filepath.Join(obsPath, line)
+
+		if err := s.obs.syncSmallFile(src, dst); err != nil {
 			return true
 		}
 
@@ -103,10 +105,12 @@ func (s syncService) syncSmallFiles(file, repoDir, obsPath string) error {
 	})
 }
 
-func (s syncService) syncLFSFiles(file, obsPath string) error {
-	return utils.ReadFileLineByLine(file, func(line string) bool {
+func (s syncService) syncLFSFiles(lfsFiles, obsPath string) error {
+	return utils.ReadFileLineByLine(lfsFiles, func(line string) bool {
 		v := strings.Split(line, ":oid sha256:")
-		if err := s.obs.syncLFSFile(v[0], v[1], obsPath); err != nil {
+		dst := filepath.Join(obsPath, v[0])
+
+		if err := s.obs.syncLFSFile(v[1], dst); err != nil {
 			return true
 		}
 
@@ -114,14 +118,13 @@ func (s syncService) syncLFSFiles(file, obsPath string) error {
 	})
 }
 
-func (s syncService) getCommitFile(dir string, commit *syncCommit) (
+func (s syncService) getCommitFile(workDir string, commit *syncCommit) (
 	smallFile string, lfsFile string, err error,
 ) {
 	v, err, _ := utils.RunCmd(
-		s.commitFileSh, dir, commit.repoURL,
+		s.commitFileSh, workDir, commit.repoURL,
 		commit.repoName, commit.commit,
 	)
-
 	if err != nil {
 		return
 	}

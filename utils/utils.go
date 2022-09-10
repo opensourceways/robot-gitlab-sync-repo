@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 func GenMD5(b []byte) string {
@@ -38,4 +39,22 @@ func ReadFileLineByLine(filename string, handle func(string) bool) error {
 	}
 
 	return nil
+}
+
+func Retry(f func() error) (err error) {
+	if err = f(); err == nil {
+		return
+	}
+
+	t := 100 * time.Millisecond
+
+	for i := 1; i < 10; i++ {
+		time.Sleep(t)
+
+		if err = f(); err == nil {
+			return
+		}
+	}
+
+	return
 }
