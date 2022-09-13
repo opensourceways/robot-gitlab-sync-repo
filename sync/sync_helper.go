@@ -10,7 +10,7 @@ import (
 	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
-type syncToOBS struct {
+type syncHelper struct {
 	obsClient         *obs.ObsClient
 	lfsPath           string
 	repoPath          string
@@ -20,7 +20,7 @@ type syncToOBS struct {
 
 // sha: sha
 // dst: user/[project,model,dataset]/repo_id/xxx
-func (s *syncToOBS) syncLFSFile(sha, dst string) error {
+func (s *syncHelper) syncLFSFile(sha, dst string) error {
 	return utils.Retry(func() error {
 		return s.copyOBSObject(
 			filepath.Join(s.lfsPath, sha[:2], sha[2:4], sha[4:]),
@@ -29,7 +29,7 @@ func (s *syncToOBS) syncLFSFile(sha, dst string) error {
 }
 
 // p: user/[project,model,dataset]/repo_id
-func (s *syncToOBS) getCurrentCommit(p string) (c string, err error) {
+func (s *syncHelper) getCurrentCommit(p string) (c string, err error) {
 	err = utils.Retry(func() error {
 		v, err := s.getOBSObject(
 			filepath.Join(s.repoPath, p, s.currentCommitFile),
@@ -45,7 +45,7 @@ func (s *syncToOBS) getCurrentCommit(p string) (c string, err error) {
 }
 
 // p: user/[project,model,dataset]/repo_id
-func (s *syncToOBS) updateCurrentCommit(p, commit string) error {
+func (s *syncHelper) updateCurrentCommit(p, commit string) error {
 	return utils.Retry(func() error {
 		return s.saveToOBS(
 			filepath.Join(s.repoPath, p, s.currentCommitFile),
@@ -55,11 +55,11 @@ func (s *syncToOBS) updateCurrentCommit(p, commit string) error {
 }
 
 // p: user/[project,model,dataset]/repo_id
-func (s *syncToOBS) getRepoObsPath(p string) string {
+func (s *syncHelper) getRepoObsPath(p string) string {
 	return filepath.Join(s.repoPath, p)
 }
 
-func (s *syncToOBS) saveToOBS(to, content string) error {
+func (s *syncHelper) saveToOBS(to, content string) error {
 	input := &obs.PutObjectInput{}
 	input.Bucket = s.bucketName
 	input.Key = to
@@ -71,7 +71,7 @@ func (s *syncToOBS) saveToOBS(to, content string) error {
 	return err
 }
 
-func (s *syncToOBS) copyOBSObject(from, to string) error {
+func (s *syncHelper) copyOBSObject(from, to string) error {
 	input := &obs.CopyObjectInput{}
 	input.Bucket = s.bucketName
 	input.Key = to
@@ -83,7 +83,7 @@ func (s *syncToOBS) copyOBSObject(from, to string) error {
 	return err
 }
 
-func (s *syncToOBS) getOBSObject(p string) ([]byte, error) {
+func (s *syncHelper) getOBSObject(p string) ([]byte, error) {
 	input := &obs.GetObjectInput{}
 	input.Bucket = s.bucketName
 	input.Key = p

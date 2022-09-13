@@ -5,8 +5,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 
 	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
 	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
@@ -14,27 +15,47 @@ import (
 
 type RepoInfo struct {
 	Owner    string
-	RepoId   int
+	RepoId   string
 	RepoURL  string
 	RepoType string
 	RepoName string
 }
 
 func (s *RepoInfo) repoOBSPath() string {
-	return filepath.Join(s.Owner, s.RepoType, strconv.Itoa(s.RepoId))
+	return filepath.Join(s.Owner, s.RepoType, s.RepoId)
 }
 
 type SyncService interface {
-	Sync(*RepoInfo) error
+	SyncRepo(*RepoInfo) error
+}
+
+func NewSyncService(
+	cfg *Config, cli *obs.ObsClient, syncRepo domain.Repository,
+	getLastCommit func(string) (string, error),
+) SyncService {
+	return &syncService{
+		h: &syncHelper{
+			obsClient:         cli,
+			lfsPath:           cfg.LFSPath,
+			repoPath:          cfg.RepoPath,
+			bucketName:        cfg.Bucket,
+			currentCommitFile: cfg.CommitFile,
+		},
+		workDir:       cfg.WorkDir,
+		obsutil:       cfg.OBSUtilPath,
+		syncFileSh:    cfg.SyncFileShell,
+		syncRepo:      syncRepo,
+		getLastCommit: getLastCommit,
+	}
 }
 
 type syncService struct {
-	obs           *syncToOBS
+	h             *syncHelper
 	workDir       string
 	obsutil       string
 	syncFileSh    string
 	syncRepo      domain.Repository
-	getLastCommit func(string, int) (string, error)
+	getLastCommit func(string) (string, error)
 }
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
@@ -48,7 +69,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 		return errors.New("can't sync")
 	}
 
-	lastCommit, err := s.getLastCommit(info.Owner, info.RepoId)
+	lastCommit, err := s.getLastCommit(info.RepoId)
 	if err != nil {
 		return err
 	}
@@ -105,7 +126,7 @@ func (s *syncService) sync(info *RepoInfo) (last string, err error) {
 		}
 	}
 
-	err = s.obs.updateCurrentCommit(info.repoOBSPath(), last)
+	err = s.h.updateCurrentCommit(info.repoOBSPath(), last)
 
 	return
 }
@@ -117,7 +138,7 @@ func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
 		v := strings.Split(line, ":oid sha256:")
 		dst := filepath.Join(obsPath, v[0])
 
-		if err := s.obs.syncLFSFile(v[1], dst); err != nil {
+		if err := s.h.syncLFSFile(v[1], dst); err != nil {
 			return true
 		}
 
@@ -129,12 +150,12 @@ func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 	lastCommit string, lfsFile string, err error,
 ) {
 	p := info.repoOBSPath()
-	c, err := s.obs.getCurrentCommit(p)
+	c, err := s.h.getCurrentCommit(p)
 	if err != nil {
 		return
 	}
 
-	obspath := s.obs.getRepoObsPath(p)
+	obspath := s.h.getRepoObsPath(p)
 	if !strings.HasPrefix(obspath, "/") {
 		obspath += "/"
 	}

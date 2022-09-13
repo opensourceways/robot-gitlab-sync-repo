@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -12,22 +14,21 @@ import (
 
 const botName = "sync_repo"
 
-type iClient interface {
-}
-
-func newRobot(cli iClient, gc func() (*configuration, error)) *robot {
-	return &robot{cli: cli, getConfig: gc}
+func newRobot(token string, s sync.SyncService) *robot {
+	return &robot{
+		root:    fmt.Sprintf("://root:%s@", token),
+		service: s,
+	}
 }
 
 type robot struct {
-	getConfig func() (*configuration, error)
-	cli       iClient
-	root      string
-	service   sync.SyncService
+	root    string
+	service sync.SyncService
 }
 
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 	repoName := e.Project.Name
+
 	repoType := ""
 	if strings.HasPrefix(repoName, "project") {
 		repoType = "project"
@@ -41,20 +42,15 @@ func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 
 	url := strings.Replace(e.Project.GitHTTPURL, "://", bot.root, 1)
 
-	if e.Before == "" {
-		// no need to handle the first commit
-		return nil
-	}
-
 	v := sync.RepoInfo{
 		Owner:    e.Project.Namespace,
-		RepoId:   e.ProjectID,
+		RepoId:   strconv.Itoa(e.ProjectID),
 		RepoURL:  url,
 		RepoName: repoName,
 		RepoType: repoType,
 	}
 
-	if err := bot.service.Sync(&v); err == nil {
+	if err := bot.service.SyncRepo(&v); err == nil {
 		return nil
 	}
 
