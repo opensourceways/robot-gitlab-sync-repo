@@ -1,14 +1,23 @@
 package main
 
 import (
+	"errors"
+	"strconv"
+	"strings"
+
 	"github.com/sirupsen/logrus"
 	sdk "github.com/xanzy/go-gitlab"
+
+	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
 )
 
-// TODO: set botName
-const botName = ""
+const botName = "sync_repo"
 
 type iClient interface {
+}
+
+type SyncService interface {
+	Sync(commit sync.SyncCommit) error
 }
 
 func newRobot(cli iClient, gc func() (*configuration, error)) *robot {
@@ -18,29 +27,45 @@ func newRobot(cli iClient, gc func() (*configuration, error)) *robot {
 type robot struct {
 	getConfig func() (*configuration, error)
 	cli       iClient
-}
-
-func (bot *robot) HandleMergeRequestEvent(e *sdk.MergeEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle PR event, delete this function.
-	return nil
-}
-
-func (bot *robot) HandleIssueEvent(e *sdk.IssueEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Issue event, delete this function.
-	return nil
+	root      string
+	service   SyncService
 }
 
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Push event, delete this function.
-	return nil
-}
+	repoName := e.Project.Name
+	repoType := ""
+	if strings.HasPrefix(repoName, "project") {
+		repoType = "project"
+	} else if strings.HasPrefix(repoName, "model") {
+		repoType = "model"
+	} else if strings.HasPrefix(repoName, "dataset") {
+		repoType = "dataset"
+	} else {
+		return errors.New("unknown repo type")
+	}
 
-func (bot *robot) HandleMergeCommentEvent(e *sdk.MergeCommentEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Note event of PR, delete this function.
-	return nil
-}
+	url := strings.Replace(e.Project.GitHTTPURL, "://", bot.root, 1)
 
-func (bot *robot) HandleIssueCommentEvent(e *sdk.IssueCommentEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Note event of Issue, delete this function.
+	if e.Before == "" {
+		// no need to handle the first commit
+		return nil
+	}
+
+	v := sync.SyncCommit{
+		Owner:        e.Project.Namespace,
+		RepoId:       strconv.Itoa(e.ProjectID),
+		RepoURL:      url,
+		RepoName:     repoName,
+		RepoType:     repoType,
+		Commit:       e.After,
+		ParentCommit: e.Before,
+	}
+
+	if err := bot.service.Sync(v); err == nil {
+		return nil
+	}
+
+	// send back the request
+
 	return nil
 }

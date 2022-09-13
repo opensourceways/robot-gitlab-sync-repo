@@ -1,4 +1,4 @@
-package main
+package sync
 
 import (
 	"io"
@@ -39,11 +39,14 @@ func (s *syncToOBS) syncLFSFile(sha, dst string) error {
 }
 
 // p: user/[project,model,dataset]/repo_id
-func (s *syncToOBS) getCurrentCommit(p string) (d []byte, unavailable bool, err error) {
-	utils.Retry(func() error {
-		d, unavailable, err = s.getOBSObject(
+func (s *syncToOBS) getCurrentCommit(p string) (c string, err error) {
+	err = utils.Retry(func() error {
+		v, err := s.getOBSObject(
 			filepath.Join(s.repoPath, p, s.currentCommitFile),
 		)
+		if err == nil && len(v) > 0 {
+			c = string(v)
+		}
 
 		return err
 	})
@@ -59,6 +62,11 @@ func (s *syncToOBS) updateCurrentCommit(p, commit string) error {
 			commit,
 		)
 	})
+}
+
+// p: user/[project,model,dataset]/repo_id
+func (s *syncToOBS) getRepoObsPath(p string) string {
+	return filepath.Join(s.repoPath, p, "/")
 }
 
 func (s *syncToOBS) uploadFileToOBS(from, to string) error {
@@ -113,7 +121,7 @@ func (s *syncToOBS) copyOBSObject(from, to string) error {
 	return err
 }
 
-func (s *syncToOBS) getOBSObject(p string) ([]byte, bool, error) {
+func (s *syncToOBS) getOBSObject(p string) ([]byte, error) {
 	input := &obs.GetObjectInput{}
 	input.Bucket = s.bucketName
 	input.Key = p
@@ -122,15 +130,13 @@ func (s *syncToOBS) getOBSObject(p string) ([]byte, bool, error) {
 	if err != nil {
 		v, ok := err.(obs.ObsError)
 		if ok && v.BaseModel.StatusCode == 404 {
-			return nil, true, nil
+			return nil, nil
 		}
 
-		return nil, false, err
+		return nil, err
 	}
 
 	defer output.Body.Close()
 
-	v, err := ioutil.ReadAll(output.Body)
-
-	return v, false, err
+	return ioutil.ReadAll(output.Body)
 }

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/opensourceways/community-robot-lib/config"
 	"github.com/opensourceways/community-robot-lib/gitlabclient"
 	"github.com/opensourceways/community-robot-lib/logrusutil"
@@ -12,6 +13,7 @@ import (
 	framework "github.com/opensourceways/community-robot-lib/robot-gitlab-framework"
 	"github.com/opensourceways/community-robot-lib/secret"
 	"github.com/sirupsen/logrus"
+	"github.com/xanzy/go-gitlab"
 )
 
 type options struct {
@@ -80,4 +82,28 @@ func main() {
 	})
 
 	framework.Run(r, o.service.Port, o.service.GracePeriod)
+}
+
+func newGitlabClient(getToken func() []byte, host string) (*gitlab.Client, error) {
+	tc := string(getToken())
+	opts := gitlab.WithBaseURL(host)
+
+	return gitlab.NewOAuthClient(tc, opts)
+}
+
+func getLastestCommit(cli *gitlab.Client, pid string) (string, error) {
+	v, _, err := cli.Commits.ListCommits(pid, nil, func(req *retryablehttp.Request) error {
+		v := req.URL.Query()
+		v.Add("per_page", "1")
+		v.Add("page=1", "1")
+		req.URL.RawQuery = v.Encode()
+
+		return nil
+	})
+
+	if err != nil || len(v) == 0 {
+		return "", err
+	}
+
+	return v[0].ID, nil
 }
