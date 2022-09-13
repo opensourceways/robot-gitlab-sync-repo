@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/opensourceways/community-robot-lib/utils"
 	"github.com/sirupsen/logrus"
 	sdk "github.com/xanzy/go-gitlab"
 
@@ -14,16 +17,22 @@ import (
 
 const botName = "sync_repo"
 
-func newRobot(token string, s sync.SyncService) *robot {
+func newRobot(user, token, hmac, endpoint string, s sync.SyncService) *robot {
 	return &robot{
-		root:    fmt.Sprintf("://root:%s@", token),
-		service: s,
+		root:     fmt.Sprintf("://%s:%s@", user, token),
+		hmac:     hmac,
+		endpoint: endpoint,
+		service:  s,
+		hc:       utils.HttpClient{MaxRetries: 3},
 	}
 }
 
 type robot struct {
-	root    string
-	service sync.SyncService
+	root     string
+	hmac     string
+	endpoint string
+	hc       utils.HttpClient
+	service  sync.SyncService
 }
 
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
@@ -54,7 +63,28 @@ func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 		return nil
 	}
 
-	// send back the request
+	return bot.sendBack(e)
+}
 
-	return nil
+func (bot *robot) sendBack(e *sdk.PushEvent) error {
+	body, err := utils.JsonMarshal(e)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(
+		http.MethodPost, bot.endpoint, bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return err
+	}
+
+	h := &req.Header
+	h.Add("Content-Type", "application/json")
+	h.Add("User-Agent", botName)
+	h.Add("X-Gitlab-Event", "System Hook")
+	h.Add("X-Gitlab-Token", bot.hmac)
+	h.Add("X-Gitlab-Event-UUID", "73ed8438-1119-4bb8-ae9d-0180c88ef168")
+
+	return bot.hc.ForwardTo(req, nil)
 }

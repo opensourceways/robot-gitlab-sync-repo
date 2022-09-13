@@ -11,7 +11,6 @@ import (
 	"github.com/opensourceways/community-robot-lib/logrusutil"
 	liboptions "github.com/opensourceways/community-robot-lib/options"
 	framework "github.com/opensourceways/community-robot-lib/robot-gitlab-framework"
-	"github.com/opensourceways/community-robot-lib/utils"
 	"github.com/sirupsen/logrus"
 	"github.com/xanzy/go-gitlab"
 
@@ -19,10 +18,9 @@ import (
 )
 
 type options struct {
-	service       liboptions.ServiceOptions
-	token         liboptions.GitLabOptions
-	endpoint      string
-	obsConfigFile string
+	service  liboptions.ServiceOptions
+	gitlab   liboptions.GitLabOptions
+	endpoint string
 }
 
 func (o *options) Validate() error {
@@ -30,16 +28,12 @@ func (o *options) Validate() error {
 		return err
 	}
 
-	if err := o.token.Validate(); err != nil {
+	if err := o.gitlab.Validate(); err != nil {
 		return err
 	}
 
 	if o.endpoint == "" {
 		return errors.New("missing gitlab-endpoint")
-	}
-
-	if o.obsConfigFile == "" {
-		return errors.New("missing obs-config-file")
 	}
 
 	return nil
@@ -48,12 +42,10 @@ func (o *options) Validate() error {
 func gatherOptions(fs *flag.FlagSet, args ...string) options {
 	var o options
 
-	o.token.AddFlags(fs)
+	o.gitlab.AddFlags(fs)
 	o.service.AddFlags(fs)
 
 	fs.StringVar(&o.endpoint, "gitlab-endpoint", "", "the endpoint of gitlab.")
-
-	fs.StringVar(&o.obsConfigFile, "obs-config-file", "", "the path to obs config file.")
 
 	fs.Parse(args)
 	return o
@@ -68,16 +60,24 @@ func main() {
 		logrus.WithError(err).Fatal("Invalid options")
 	}
 
-	//
-	v, err := ioutil.ReadFile(o.token.TokenPath)
+	// load config
+	cfg, err := loadConfig(o.service.ConfigFile)
+	if err != nil {
+		log.Errorf("load config failed, err:%s", err.Error())
+
+		return
+	}
+
+	// load gitlab token
+	gitlabToken, err := ioutil.ReadFile(o.gitlab.TokenPath)
 	if err != nil {
 		log.Errorf("read gitlab token failed, err:%s", err.Error())
 
 		return
 	}
 
-	// gitlabt client
-	cli, err := newGitlabClient(v, o.endpoint)
+	// gitlab client
+	cli, err := newGitlabClient(gitlabToken, o.endpoint)
 	if err != nil {
 		log.Errorf("new gitlab client failed, err:%s", err.Error())
 
@@ -85,13 +85,6 @@ func main() {
 	}
 
 	// obs client
-	cfg, err := loadConfig(o.obsConfigFile)
-	if err != nil {
-		log.Errorf("load config failed, err:%s", err.Error())
-
-		return
-	}
-
 	oc := &cfg.OBSConfig
 	obsClient, err := obs.New(oc.AccessKey, oc.SecretKey, oc.Endpoint)
 	if err != nil {
@@ -108,7 +101,11 @@ func main() {
 		},
 	)
 
-	r := newRobot(string(v), service)
+	r := newRobot(
+		"root", string(gitlabToken),
+		cfg.AccessHmac, cfg.AccessEndpoint,
+		service,
+	)
 
 	framework.Run(r, o.service.Port, o.service.GracePeriod)
 }
@@ -135,14 +132,4 @@ func getLastestCommit(cli *gitlab.Client, pid string) (string, error) {
 	}
 
 	return v[0].ID, nil
-}
-
-func loadConfig(file string) (cfg configuration, err error) {
-	if err = utils.LoadFromYaml(file, &cfg); err != nil {
-		return
-	}
-
-	// validate
-
-	return
 }

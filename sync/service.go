@@ -60,7 +60,7 @@ type syncService struct {
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
 	// if 404, create in the Find
-	c, err := s.syncRepo.Find(info.Owner, info.RepoName)
+	c, err := s.syncRepo.Find(info.Owner, info.RepoId)
 	if err != nil {
 		return err
 	}
