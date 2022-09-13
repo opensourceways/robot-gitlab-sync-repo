@@ -12,33 +12,34 @@ import (
 	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
-type SyncCommit struct {
-	Owner        string
-	RepoId       int
-	RepoURL      string
-	RepoType     string
-	RepoName     string
-	Commit       string
-	ParentCommit string
+type RepoInfo struct {
+	Owner    string
+	RepoId   int
+	RepoURL  string
+	RepoType string
+	RepoName string
 }
 
-func (s *SyncCommit) repoOBSPath() string {
+func (s *RepoInfo) repoOBSPath() string {
 	return filepath.Join(s.Owner, s.RepoType, strconv.Itoa(s.RepoId))
+}
+
+type SyncService interface {
+	Sync(*RepoInfo) error
 }
 
 type syncService struct {
 	obs           *syncToOBS
 	workDir       string
-	commitFileSh  string
 	obsutil       string
+	syncFileSh    string
 	syncRepo      domain.Repository
-	isFirstCommit func(string, string) (bool, error)
 	getLastCommit func(string, int) (string, error)
 }
 
-func (s *syncService) SyncRepo(commit *SyncCommit) error {
+func (s *syncService) SyncRepo(info *RepoInfo) error {
 	// if 404, create in the Find
-	c, err := s.syncRepo.Find(commit.Owner, commit.RepoName)
+	c, err := s.syncRepo.Find(info.Owner, info.RepoName)
 	if err != nil {
 		return err
 	}
@@ -47,7 +48,7 @@ func (s *syncService) SyncRepo(commit *SyncCommit) error {
 		return errors.New("can't sync")
 	}
 
-	lastCommit, err := s.getLastCommit(commit.Owner, commit.RepoId)
+	lastCommit, err := s.getLastCommit(info.Owner, info.RepoId)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func (s *syncService) SyncRepo(commit *SyncCommit) error {
 	}
 
 	// do sync
-	lastCommit, err = s.sync(commit)
+	lastCommit, err = s.sync(info)
 
 	// update
 	c.Status = "done"
@@ -85,7 +86,7 @@ func (s *syncService) SyncRepo(commit *SyncCommit) error {
 	return err
 }
 
-func (s *syncService) sync(commit *SyncCommit) (last string, err error) {
+func (s *syncService) sync(info *RepoInfo) (last string, err error) {
 	tempDir, err := ioutil.TempDir(s.workDir, "sync")
 	if err != nil {
 		return
@@ -93,23 +94,25 @@ func (s *syncService) sync(commit *SyncCommit) (last string, err error) {
 
 	defer os.RemoveAll(tempDir)
 
-	last, lfsFile, err := s.getCommitFile(tempDir, commit)
+	last, lfsFile, err := s.syncFile(tempDir, info)
 	if err != nil {
 		return
 	}
 
 	if lfsFile != "" {
-		if err = s.syncLFSFiles(lfsFile, commit.repoOBSPath()); err != nil {
+		if err = s.syncLFSFiles(lfsFile, info); err != nil {
 			return
 		}
 	}
 
-	err = s.obs.updateCurrentCommit(commit.repoOBSPath(), last)
+	err = s.obs.updateCurrentCommit(info.repoOBSPath(), last)
 
 	return
 }
 
-func (s *syncService) syncLFSFiles(lfsFiles, obsPath string) error {
+func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
+	obsPath := info.repoOBSPath()
+
 	return utils.ReadFileLineByLine(lfsFiles, func(line string) bool {
 		v := strings.Split(line, ":oid sha256:")
 		dst := filepath.Join(obsPath, v[0])
@@ -122,19 +125,19 @@ func (s *syncService) syncLFSFiles(lfsFiles, obsPath string) error {
 	})
 }
 
-func (s *syncService) getCommitFile(workDir string, commit *SyncCommit) (
+func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 	lastCommit string, lfsFile string, err error,
 ) {
-	c, err := s.obs.getCurrentCommit(commit.repoOBSPath())
+	c, err := s.obs.getCurrentCommit(info.repoOBSPath())
 	if err != nil {
 		return
 	}
 
-	obspath := s.obs.getRepoObsPath(commit.repoOBSPath())
+	obspath := s.obs.getRepoObsPath(info.repoOBSPath())
 
 	v, err, _ := utils.RunCmd(
-		s.commitFileSh, workDir, commit.RepoURL,
-		commit.RepoName, c, s.obsutil, obspath,
+		s.syncFileSh, workDir, info.RepoURL,
+		info.RepoName, c, s.obsutil, obspath,
 	)
 	if err != nil {
 		return

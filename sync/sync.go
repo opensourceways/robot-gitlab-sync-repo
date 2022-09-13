@@ -1,9 +1,7 @@
 package sync
 
 import (
-	"io"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -18,14 +16,6 @@ type syncToOBS struct {
 	repoPath          string
 	bucketName        string
 	currentCommitFile string // config
-}
-
-// src: local file
-// dst: user/[project,model,dataset]/repo_id/xxx
-func (s *syncToOBS) syncSmallFile(src, dst string) error {
-	return utils.Retry(func() error {
-		return s.uploadFileToOBS(src, filepath.Join(s.repoPath, dst))
-	})
 }
 
 // sha: sha
@@ -67,34 +57,6 @@ func (s *syncToOBS) updateCurrentCommit(p, commit string) error {
 // p: user/[project,model,dataset]/repo_id
 func (s *syncToOBS) getRepoObsPath(p string) string {
 	return filepath.Join(s.repoPath, p, "/")
-}
-
-func (s *syncToOBS) uploadFileToOBS(from, to string) error {
-	f, err := os.Open(from)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-
-	md5, err := utils.GenMd5OfByteStream(f)
-	if err != nil {
-		return err
-	}
-
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-
-	input := &obs.PutObjectInput{}
-	input.Bucket = s.bucketName
-	input.Key = to
-	input.Body = f
-	input.ContentMD5 = md5
-
-	_, err = s.obsClient.PutObject(input)
-
-	return err
 }
 
 func (s *syncToOBS) saveToOBS(to, content string) error {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -16,10 +15,6 @@ const botName = "sync_repo"
 type iClient interface {
 }
 
-type SyncService interface {
-	Sync(commit sync.SyncCommit) error
-}
-
 func newRobot(cli iClient, gc func() (*configuration, error)) *robot {
 	return &robot{cli: cli, getConfig: gc}
 }
@@ -28,7 +23,7 @@ type robot struct {
 	getConfig func() (*configuration, error)
 	cli       iClient
 	root      string
-	service   SyncService
+	service   sync.SyncService
 }
 
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
@@ -51,17 +46,15 @@ func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 		return nil
 	}
 
-	v := sync.SyncCommit{
-		Owner:        e.Project.Namespace,
-		RepoId:       strconv.Itoa(e.ProjectID),
-		RepoURL:      url,
-		RepoName:     repoName,
-		RepoType:     repoType,
-		Commit:       e.After,
-		ParentCommit: e.Before,
+	v := sync.RepoInfo{
+		Owner:    e.Project.Namespace,
+		RepoId:   e.ProjectID,
+		RepoURL:  url,
+		RepoName: repoName,
+		RepoType: repoType,
 	}
 
-	if err := bot.service.Sync(v); err == nil {
+	if err := bot.service.Sync(&v); err == nil {
 		return nil
 	}
 
