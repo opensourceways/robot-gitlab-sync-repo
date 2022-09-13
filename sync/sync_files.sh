@@ -4,20 +4,22 @@ set -eu
 # don't set any options, otherwise it will fail arbitrarily
 # set -euo pipefail
 
-work_dir=$1 # work_dir can't has suffix of / and must be an absolute path
+echo_message() {
+    echo "$1, $2, $3"
+}
+
+work_dir=$1
 repo_url=$2
 repo_name=$3
 start_commit=$4
 obsutil=$5 # the path of obsutil
 obspath=$6 # obspath should has suffix of /
 
-test -d $work_dir || mkdir $work_dir
-
-echo_message() {
-    echo "$1, $2, $3"
-}
-
+test -d $work_dir || mkdir -p $work_dir
 cd $work_dir
+
+# work_dir can't has suffix of / and must be an absolute path
+work_dir=$(pwd)
 
 git clone -q $repo_url
 cd $repo_name

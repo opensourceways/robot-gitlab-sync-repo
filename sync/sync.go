@@ -56,7 +56,7 @@ func (s *syncToOBS) updateCurrentCommit(p, commit string) error {
 
 // p: user/[project,model,dataset]/repo_id
 func (s *syncToOBS) getRepoObsPath(p string) string {
-	return filepath.Join(s.repoPath, p, "/")
+	return filepath.Join(s.repoPath, p)
 }
 
 func (s *syncToOBS) saveToOBS(to, content string) error {

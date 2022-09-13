@@ -128,12 +128,16 @@ func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
 func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 	lastCommit string, lfsFile string, err error,
 ) {
-	c, err := s.obs.getCurrentCommit(info.repoOBSPath())
+	p := info.repoOBSPath()
+	c, err := s.obs.getCurrentCommit(p)
 	if err != nil {
 		return
 	}
 
-	obspath := s.obs.getRepoObsPath(info.repoOBSPath())
+	obspath := s.obs.getRepoObsPath(p)
+	if !strings.HasPrefix(obspath, "/") {
+		obspath += "/"
+	}
 
 	v, err, _ := utils.RunCmd(
 		s.syncFileSh, workDir, info.RepoURL,
