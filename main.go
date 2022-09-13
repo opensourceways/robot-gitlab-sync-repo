@@ -15,6 +15,7 @@ import (
 	"github.com/xanzy/go-gitlab"
 
 	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
+	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
 type options struct {
@@ -89,6 +90,18 @@ func main() {
 	obsClient, err := obs.New(oc.AccessKey, oc.SecretKey, oc.Endpoint)
 	if err != nil {
 		log.Errorf("new obs client failed, err:%s", err.Error())
+
+		return
+	}
+
+	_, err, _ = utils.RunCmd(
+		cfg.SyncConfig.OBSUtilPath, "config",
+		"-i="+oc.AccessKey,
+		"-k="+oc.SecretKey,
+		"-e="+oc.Endpoint,
+	)
+	if err != nil {
+		log.Errorf("obsutil config failed, err:%s", err.Error())
 
 		return
 	}
