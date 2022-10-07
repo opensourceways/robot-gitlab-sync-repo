@@ -18,12 +18,11 @@ type configSetDefault interface {
 
 type configuration struct {
 	// AccessEndpoint is used to send back the message.
-	AccessEndpoint string `json:"access_endpoint" required:"true"`
-	AccessHmac     string `json:"access_hmac"     required:"true"`
-
-	Sync   sync.Config         `json:"sync"`
-	OBS    obsimpl.Config      `json:"obs"`
-	Gitlab platformimpl.Config `json:"gitlab"`
+	AccessEndpoint string              `json:"access_endpoint" required:"true"`
+	AccessHmac     string              `json:"access_hmac"     required:"true"`
+	OBS            obsimpl.Config      `json:"obs"             required:"true"`
+	Sync           sync.Config         `json:"sync"            required:"true"`
+	Gitlab         platformimpl.Config `json:"gitlab"          required:"true"`
 }
 
 func (cfg *configuration) configItems() []interface{} {

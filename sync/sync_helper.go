@@ -8,10 +8,8 @@ import (
 )
 
 type syncHelper struct {
-	obsService        obs.OBS
-	lfsPath           string
-	repoPath          string
-	currentCommitFile string // config
+	obsService obs.OBS
+	cfg        HelperConfig
 }
 
 // sha: sha
@@ -19,8 +17,8 @@ type syncHelper struct {
 func (s *syncHelper) syncLFSFile(sha, dst string) error {
 	return utils.Retry(func() error {
 		return s.obsService.CopyObject(
-			filepath.Join(s.repoPath, dst),
-			filepath.Join(s.lfsPath, sha[:2], sha[2:4], sha[4:]),
+			filepath.Join(s.cfg.RepoPath, dst),
+			filepath.Join(s.cfg.LFSPath, sha[:2], sha[2:4], sha[4:]),
 		)
 	})
 }
@@ -29,7 +27,7 @@ func (s *syncHelper) syncLFSFile(sha, dst string) error {
 func (s *syncHelper) getCurrentCommit(p string) (c string, err error) {
 	err = utils.Retry(func() error {
 		v, err := s.obsService.GetObject(
-			filepath.Join(s.repoPath, p, s.currentCommitFile),
+			filepath.Join(s.cfg.RepoPath, p, s.cfg.CommitFile),
 		)
 		if err == nil && len(v) > 0 {
 			c = string(v)
@@ -45,7 +43,7 @@ func (s *syncHelper) getCurrentCommit(p string) (c string, err error) {
 func (s *syncHelper) updateCurrentCommit(p, commit string) error {
 	return utils.Retry(func() error {
 		return s.obsService.SaveObject(
-			filepath.Join(s.repoPath, p, s.currentCommitFile),
+			filepath.Join(s.cfg.RepoPath, p, s.cfg.CommitFile),
 			commit,
 		)
 	})
@@ -53,5 +51,5 @@ func (s *syncHelper) updateCurrentCommit(p, commit string) error {
 
 // p: user/[project,model,dataset]/repo_id
 func (s *syncHelper) getRepoObsPath(p string) string {
-	return filepath.Join(s.repoPath, p)
+	return filepath.Join(s.cfg.RepoPath, p)
 }

@@ -34,26 +34,23 @@ func NewSyncService(
 ) SyncService {
 	return &syncService{
 		h: &syncHelper{
-			obsService:        s,
-			lfsPath:           cfg.LFSPath,
-			repoPath:          cfg.RepoPath,
-			currentCommitFile: cfg.CommitFile,
+			obsService: s,
+			cfg:        cfg.HelperConfig,
 		},
-		workDir:    cfg.WorkDir,
-		obsutil:    s.OBSUtilPath(),
-		syncFileSh: cfg.SyncFileShell,
-		syncRepo:   syncRepo,
-		ph:         p,
+		cfg:      cfg.ServiceConfig,
+		obsutil:  s.OBSUtilPath(),
+		syncRepo: syncRepo,
+		ph:       p,
 	}
 }
 
 type syncService struct {
-	h          *syncHelper
-	workDir    string
-	obsutil    string
-	syncFileSh string
-	syncRepo   repository.RepoSync
-	ph         platform.Platform
+	h       *syncHelper
+	cfg     ServiceConfig
+	obsutil string
+
+	syncRepo repository.RepoSync
+	ph       platform.Platform
 }
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
@@ -106,7 +103,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 }
 
 func (s *syncService) sync(info *RepoInfo) (last string, err error) {
-	tempDir, err := ioutil.TempDir(s.workDir, "sync")
+	tempDir, err := ioutil.TempDir(s.cfg.WorkDir, "sync")
 	if err != nil {
 		return
 	}
@@ -159,7 +156,7 @@ func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 	}
 
 	v, err, _ := utils.RunCmd(
-		s.syncFileSh, workDir,
+		s.cfg.SyncFileShell, workDir,
 		s.ph.GetCloneURL(info.Owner, info.RepoName),
 		info.RepoName, c, s.obsutil, obspath,
 	)

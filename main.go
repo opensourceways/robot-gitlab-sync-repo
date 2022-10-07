@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"os"
 
@@ -16,34 +15,17 @@ import (
 )
 
 type options struct {
-	service  liboptions.ServiceOptions
-	gitlab   liboptions.GitLabOptions
-	endpoint string
+	service liboptions.ServiceOptions
 }
 
 func (o *options) Validate() error {
-	if err := o.service.Validate(); err != nil {
-		return err
-	}
-
-	if err := o.gitlab.Validate(); err != nil {
-		return err
-	}
-
-	if o.endpoint == "" {
-		return errors.New("missing gitlab-endpoint")
-	}
-
-	return nil
+	return o.service.Validate()
 }
 
 func gatherOptions(fs *flag.FlagSet, args ...string) options {
 	var o options
 
-	o.gitlab.AddFlags(fs)
 	o.service.AddFlags(fs)
-
-	fs.StringVar(&o.endpoint, "gitlab-endpoint", "", "the endpoint of gitlab.")
 
 	fs.Parse(args)
 	return o

@@ -6,9 +6,17 @@ import (
 )
 
 type Config struct {
+	ServiceConfig
+
+	HelperConfig
+}
+
+type ServiceConfig struct {
 	WorkDir       string `json:"work_dir"        required:"true"`
 	SyncFileShell string `json:"sync_file_shell" required:"true"`
+}
 
+type HelperConfig struct {
 	LFSPath    string `json:"lfs_path"    required:"true"`
 	RepoPath   string `json:"repo_path"   required:"true"`
 	CommitFile string `json:"commit_file" required:"true"`
