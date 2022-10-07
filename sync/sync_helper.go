@@ -1,20 +1,16 @@
 package sync
 
 import (
-	"io/ioutil"
 	"path/filepath"
-	"strings"
 
-	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
-
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain/obs"
 	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
 type syncHelper struct {
-	obsClient         *obs.ObsClient
+	obsService        obs.OBS
 	lfsPath           string
 	repoPath          string
-	bucketName        string
 	currentCommitFile string // config
 }
 
@@ -22,16 +18,17 @@ type syncHelper struct {
 // dst: user/[project,model,dataset]/repo_id/xxx
 func (s *syncHelper) syncLFSFile(sha, dst string) error {
 	return utils.Retry(func() error {
-		return s.copyOBSObject(
+		return s.obsService.CopyObject(
+			filepath.Join(s.repoPath, dst),
 			filepath.Join(s.lfsPath, sha[:2], sha[2:4], sha[4:]),
-			filepath.Join(s.repoPath, dst))
+		)
 	})
 }
 
 // p: user/[project,model,dataset]/repo_id
 func (s *syncHelper) getCurrentCommit(p string) (c string, err error) {
 	err = utils.Retry(func() error {
-		v, err := s.getOBSObject(
+		v, err := s.obsService.GetObject(
 			filepath.Join(s.repoPath, p, s.currentCommitFile),
 		)
 		if err == nil && len(v) > 0 {
@@ -47,7 +44,7 @@ func (s *syncHelper) getCurrentCommit(p string) (c string, err error) {
 // p: user/[project,model,dataset]/repo_id
 func (s *syncHelper) updateCurrentCommit(p, commit string) error {
 	return utils.Retry(func() error {
-		return s.saveToOBS(
+		return s.obsService.SaveObject(
 			filepath.Join(s.repoPath, p, s.currentCommitFile),
 			commit,
 		)
@@ -57,48 +54,4 @@ func (s *syncHelper) updateCurrentCommit(p, commit string) error {
 // p: user/[project,model,dataset]/repo_id
 func (s *syncHelper) getRepoObsPath(p string) string {
 	return filepath.Join(s.repoPath, p)
-}
-
-func (s *syncHelper) saveToOBS(to, content string) error {
-	input := &obs.PutObjectInput{}
-	input.Bucket = s.bucketName
-	input.Key = to
-	input.Body = strings.NewReader(content)
-	input.ContentMD5 = utils.GenMD5([]byte(content))
-
-	_, err := s.obsClient.PutObject(input)
-
-	return err
-}
-
-func (s *syncHelper) copyOBSObject(from, to string) error {
-	input := &obs.CopyObjectInput{}
-	input.Bucket = s.bucketName
-	input.Key = to
-	input.CopySourceBucket = s.bucketName
-	input.CopySourceKey = from
-
-	_, err := s.obsClient.CopyObject(input)
-
-	return err
-}
-
-func (s *syncHelper) getOBSObject(p string) ([]byte, error) {
-	input := &obs.GetObjectInput{}
-	input.Bucket = s.bucketName
-	input.Key = p
-
-	output, err := s.obsClient.GetObject(input)
-	if err != nil {
-		v, ok := err.(obs.ObsError)
-		if ok && v.BaseModel.StatusCode == 404 {
-			return nil, nil
-		}
-
-		return nil, err
-	}
-
-	defer output.Body.Close()
-
-	return ioutil.ReadAll(output.Body)
 }

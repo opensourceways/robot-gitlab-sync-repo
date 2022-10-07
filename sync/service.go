@@ -7,16 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
-
-	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain/obs"
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain/platform"
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain/repository"
 	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
 type RepoInfo struct {
 	Owner    string
 	RepoId   string
-	RepoURL  string
 	RepoType string
 	RepoName string
 }
@@ -30,32 +29,31 @@ type SyncService interface {
 }
 
 func NewSyncService(
-	cfg *Config, cli *obs.ObsClient, syncRepo domain.Repository,
-	getLastCommit func(string) (string, error),
+	cfg *Config, s obs.OBS, syncRepo repository.RepoSync,
+	p platform.Platform,
 ) SyncService {
 	return &syncService{
 		h: &syncHelper{
-			obsClient:         cli,
+			obsService:        s,
 			lfsPath:           cfg.LFSPath,
 			repoPath:          cfg.RepoPath,
-			bucketName:        cfg.Bucket,
 			currentCommitFile: cfg.CommitFile,
 		},
-		workDir:       cfg.WorkDir,
-		obsutil:       cfg.OBSUtilPath,
-		syncFileSh:    cfg.SyncFileShell,
-		syncRepo:      syncRepo,
-		getLastCommit: getLastCommit,
+		workDir:    cfg.WorkDir,
+		obsutil:    s.OBSUtilPath(),
+		syncFileSh: cfg.SyncFileShell,
+		syncRepo:   syncRepo,
+		ph:         p,
 	}
 }
 
 type syncService struct {
-	h             *syncHelper
-	workDir       string
-	obsutil       string
-	syncFileSh    string
-	syncRepo      domain.Repository
-	getLastCommit func(string) (string, error)
+	h          *syncHelper
+	workDir    string
+	obsutil    string
+	syncFileSh string
+	syncRepo   repository.RepoSync
+	ph         platform.Platform
 }
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
@@ -65,11 +63,11 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 		return err
 	}
 
-	if c.Status != "done" {
+	if c.Status != "" && c.Status != "done" {
 		return errors.New("can't sync")
 	}
 
-	lastCommit, err := s.getLastCommit(info.RepoId)
+	lastCommit, err := s.ph.GetLastCommit(info.RepoId)
 	if err != nil {
 		return err
 	}
@@ -161,7 +159,8 @@ func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 	}
 
 	v, err, _ := utils.RunCmd(
-		s.syncFileSh, workDir, info.RepoURL,
+		s.syncFileSh, workDir,
+		s.ph.GetCloneURL(info.Owner, info.RepoName),
 		info.RepoName, c, s.obsutil, obspath,
 	)
 	if err != nil {

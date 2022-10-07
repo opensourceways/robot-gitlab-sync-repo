@@ -3,19 +3,16 @@ package main
 import (
 	"errors"
 	"flag"
-	"io/ioutil"
 	"os"
 
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
-	"github.com/huaweicloud/huaweicloud-sdk-go-obs/obs"
 	"github.com/opensourceways/community-robot-lib/logrusutil"
 	liboptions "github.com/opensourceways/community-robot-lib/options"
 	framework "github.com/opensourceways/community-robot-lib/robot-gitlab-framework"
 	"github.com/sirupsen/logrus"
-	"github.com/xanzy/go-gitlab"
 
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/obsimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/platformimpl"
 	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
-	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
 )
 
 type options struct {
@@ -69,80 +66,29 @@ func main() {
 		return
 	}
 
-	// load gitlab token
-	gitlabToken, err := ioutil.ReadFile(o.gitlab.TokenPath)
+	gitlab, err := platformimpl.NewPlatform(&cfg.Gitlab)
 	if err != nil {
-		log.Errorf("read gitlab token failed, err:%s", err.Error())
+		log.Errorf("init gitlab platform failed, err:%s", err.Error())
 
 		return
 	}
 
-	// gitlab client
-	cli, err := newGitlabClient(gitlabToken, o.endpoint)
+	// obs service
+	obsService, err := obsimpl.NewOBS(&cfg.OBS)
 	if err != nil {
-		log.Errorf("new gitlab client failed, err:%s", err.Error())
-
-		return
-	}
-
-	// obs client
-	oc := &cfg.OBSConfig
-	obsClient, err := obs.New(oc.AccessKey, oc.SecretKey, oc.Endpoint)
-	if err != nil {
-		log.Errorf("new obs client failed, err:%s", err.Error())
-
-		return
-	}
-
-	_, err, _ = utils.RunCmd(
-		cfg.SyncConfig.OBSUtilPath, "config",
-		"-i="+oc.AccessKey,
-		"-k="+oc.SecretKey,
-		"-e="+oc.Endpoint,
-	)
-	if err != nil {
-		log.Errorf("obsutil config failed, err:%s", err.Error())
+		log.Errorf("init obs service failed, err:%s", err.Error())
 
 		return
 	}
 
 	// sync service
 	service := sync.NewSyncService(
-		&cfg.SyncConfig, obsClient, nil,
-		func(pid string) (string, error) {
-			return getLastestCommit(cli, pid)
-		},
+		&cfg.Sync, obsService, nil, gitlab,
 	)
 
 	r := newRobot(
-		"root", string(gitlabToken),
-		cfg.AccessHmac, cfg.AccessEndpoint,
-		service,
+		cfg.AccessHmac, cfg.AccessEndpoint, service,
 	)
 
 	framework.Run(r, o.service.Port, o.service.GracePeriod)
-}
-
-func newGitlabClient(token []byte, host string) (*gitlab.Client, error) {
-	tc := string(token)
-	opts := gitlab.WithBaseURL(host)
-
-	return gitlab.NewOAuthClient(tc, opts)
-}
-
-func getLastestCommit(cli *gitlab.Client, pid string) (string, error) {
-	v, _, err := cli.Commits.ListCommits(pid, nil, func(req *retryablehttp.Request) error {
-		v := req.URL.Query()
-		v.Add("per_page", "1")
-		v.Add("page=1", "1")
-		req.URL.RawQuery = v.Encode()
-
-		return nil
-	})
-
-	if err != nil || len(v) == 0 {
-		return "", err
-	}
-
-	return v[0].ID, nil
 }

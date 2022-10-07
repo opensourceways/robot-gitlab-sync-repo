@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,9 +16,8 @@ import (
 
 const botName = "sync_repo"
 
-func newRobot(user, token, hmac, endpoint string, s sync.SyncService) *robot {
+func newRobot(hmac, endpoint string, s sync.SyncService) *robot {
 	return &robot{
-		root:     fmt.Sprintf("://%s:%s@", user, token),
 		hmac:     hmac,
 		endpoint: endpoint,
 		service:  s,
@@ -28,7 +26,6 @@ func newRobot(user, token, hmac, endpoint string, s sync.SyncService) *robot {
 }
 
 type robot struct {
-	root     string
 	hmac     string
 	endpoint string
 	hc       utils.HttpClient
@@ -41,20 +38,20 @@ func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 	repoType := ""
 	if strings.HasPrefix(repoName, "project") {
 		repoType = "project"
+
 	} else if strings.HasPrefix(repoName, "model") {
 		repoType = "model"
+
 	} else if strings.HasPrefix(repoName, "dataset") {
 		repoType = "dataset"
+
 	} else {
 		return errors.New("unknown repo type")
 	}
 
-	url := strings.Replace(e.Project.GitHTTPURL, "://", bot.root, 1)
-
 	v := sync.RepoInfo{
 		Owner:    e.Project.Namespace,
 		RepoId:   strconv.Itoa(e.ProjectID),
-		RepoURL:  url,
 		RepoName: repoName,
 		RepoType: repoType,
 	}
