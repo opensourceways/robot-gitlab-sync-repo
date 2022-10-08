@@ -17,8 +17,9 @@ type ServiceConfig struct {
 }
 
 type HelperConfig struct {
-	LFSPath  string `json:"lfs_path"    required:"true"`
-	RepoPath string `json:"repo_path"   required:"true"`
+	LFSPath    string `json:"lfs_path"    required:"true"`
+	RepoPath   string `json:"repo_path"   required:"true"`
+	CommitFile string `json:"commit_file" required:"true"`
 }
 
 func (c *Config) Validate() error {
