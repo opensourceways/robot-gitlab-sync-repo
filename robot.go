@@ -1,46 +1,82 @@
 package main
 
 import (
+	"bytes"
+	"net/http"
+	"strconv"
+
+	"github.com/opensourceways/community-robot-lib/utils"
 	"github.com/sirupsen/logrus"
 	sdk "github.com/xanzy/go-gitlab"
+
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
+	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
 )
 
-// TODO: set botName
-const botName = ""
+const botName = "sync_repo"
 
-type iClient interface {
-}
-
-func newRobot(cli iClient, gc func() (*configuration, error)) *robot {
-	return &robot{cli: cli, getConfig: gc}
+func newRobot(hmac, endpoint string, s sync.SyncService) *robot {
+	return &robot{
+		hmac:     hmac,
+		endpoint: endpoint,
+		service:  s,
+		hc:       utils.HttpClient{MaxRetries: 3},
+	}
 }
 
 type robot struct {
-	getConfig func() (*configuration, error)
-	cli       iClient
-}
-
-func (bot *robot) HandleMergeRequestEvent(e *sdk.MergeEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle PR event, delete this function.
-	return nil
-}
-
-func (bot *robot) HandleIssueEvent(e *sdk.IssueEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Issue event, delete this function.
-	return nil
+	hmac     string
+	endpoint string
+	hc       utils.HttpClient
+	service  sync.SyncService
 }
 
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Push event, delete this function.
-	return nil
+	repoName := e.Project.Name
+
+	repoType, err := domain.ParseResourceType(repoName)
+	if err != nil {
+		return err
+	}
+
+	owner, err := domain.NewAccount(e.Project.Namespace)
+	if err != nil {
+		return err
+	}
+
+	v := sync.RepoInfo{
+		Owner:    owner,
+		RepoId:   strconv.Itoa(e.ProjectID),
+		RepoName: repoName,
+		RepoType: repoType,
+	}
+
+	if err := bot.service.SyncRepo(&v); err == nil {
+		return nil
+	}
+
+	return bot.sendBack(e)
 }
 
-func (bot *robot) HandleMergeCommentEvent(e *sdk.MergeCommentEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Note event of PR, delete this function.
-	return nil
-}
+func (bot *robot) sendBack(e *sdk.PushEvent) error {
+	body, err := utils.JsonMarshal(e)
+	if err != nil {
+		return err
+	}
 
-func (bot *robot) HandleIssueCommentEvent(e *sdk.IssueCommentEvent, log *logrus.Entry) error {
-	// TODO: if it doesn't needd to handle Note event of Issue, delete this function.
-	return nil
+	req, err := http.NewRequest(
+		http.MethodPost, bot.endpoint, bytes.NewBuffer(body),
+	)
+	if err != nil {
+		return err
+	}
+
+	h := &req.Header
+	h.Add("Content-Type", "application/json")
+	h.Add("User-Agent", botName)
+	h.Add("X-Gitlab-Event", "System Hook")
+	h.Add("X-Gitlab-Token", bot.hmac)
+	h.Add("X-Gitlab-Event-UUID", "73ed8438-1119-4bb8-ae9d-0180c88ef168")
+
+	return bot.hc.ForwardTo(req, nil)
 }

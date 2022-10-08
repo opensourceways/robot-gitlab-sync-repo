@@ -1,39 +1,33 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"os"
 
-	"github.com/opensourceways/community-robot-lib/config"
-	"github.com/opensourceways/community-robot-lib/gitlabclient"
 	"github.com/opensourceways/community-robot-lib/logrusutil"
 	liboptions "github.com/opensourceways/community-robot-lib/options"
 	framework "github.com/opensourceways/community-robot-lib/robot-gitlab-framework"
-	"github.com/opensourceways/community-robot-lib/secret"
 	"github.com/sirupsen/logrus"
+
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/mysql"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/obsimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/platformimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/synclockimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
 )
 
 type options struct {
-	service  liboptions.ServiceOptions
-	token    liboptions.GitLabOptions
-	endpoint string
+	service liboptions.ServiceOptions
 }
 
 func (o *options) Validate() error {
-	if err := o.service.Validate(); err != nil {
-		return err
-	}
-
-	return o.token.Validate()
+	return o.service.Validate()
 }
 
 func gatherOptions(fs *flag.FlagSet, args ...string) options {
 	var o options
 
-	o.token.AddFlags(fs)
 	o.service.AddFlags(fs)
-	fs.StringVar(&o.endpoint, "gitlab-endpoint", "", "the endpoint of gitlab.")
 
 	fs.Parse(args)
 	return o
@@ -41,43 +35,54 @@ func gatherOptions(fs *flag.FlagSet, args ...string) options {
 
 func main() {
 	logrusutil.ComponentInit(botName)
+	log := logrus.NewEntry(logrus.StandardLogger())
 
 	o := gatherOptions(flag.NewFlagSet(os.Args[0], flag.ExitOnError), os.Args[1:]...)
 	if err := o.Validate(); err != nil {
 		logrus.WithError(err).Fatal("Invalid options")
 	}
 
-	secretAgent := new(secret.Agent)
-	if err := secretAgent.Start([]string{o.token.TokenPath}); err != nil {
-		logrus.WithError(err).Fatal("Error starting secret agent.")
-	}
+	// load config
+	cfg, err := loadConfig(o.service.ConfigFile)
+	if err != nil {
+		log.Errorf("load config failed, err:%s", err.Error())
 
-	defer secretAgent.Stop()
-
-	agent := config.NewConfigAgent(func() config.Config {
-		return &configuration{}
-	})
-
-	if err := agent.Start(o.service.ConfigFile); err != nil {
-		logrus.WithError(err).Errorf("start config:%s", o.service.ConfigFile)
 		return
 	}
 
-	defer agent.Stop()
+	// gitlab
+	gitlab, err := platformimpl.NewPlatform(&cfg.Gitlab)
+	if err != nil {
+		log.Errorf("init gitlab platform failed, err:%s", err.Error())
 
-	c := gitlabclient.NewGitlabClient(
-		secretAgent.GetTokenGenerator(o.token.TokenPath),
-		o.endpoint,
+		return
+	}
+
+	// obs service
+	obsService, err := obsimpl.NewOBS(&cfg.OBS)
+	if err != nil {
+		log.Errorf("init obs service failed, err:%s", err.Error())
+
+		return
+	}
+
+	// mysql
+	if err := mysql.Init(&cfg.Mysql); err != nil {
+		log.Errorf("init mysql failed, err:%s", err.Error())
+
+		return
+	}
+
+	lock := synclockimpl.NewRepoSyncLock(mysql.NewSyncLockMapper())
+
+	// sync service
+	service := sync.NewSyncService(
+		&cfg.Sync, log, obsService, gitlab, lock,
 	)
 
-	r := newRobot(c, func() (*configuration, error) {
-		_, cfg := agent.GetConfig()
-		if c, ok := cfg.(*configuration); ok {
-			return c, nil
-		}
-
-		return nil, errors.New("can't convert to configuration")
-	})
+	r := newRobot(
+		cfg.AccessHmac, cfg.AccessEndpoint, service,
+	)
 
 	framework.Run(r, o.service.Port, o.service.GracePeriod)
 }

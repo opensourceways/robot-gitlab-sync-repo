@@ -5,6 +5,7 @@
 *.so
 *.dylib
 /bazel-*
+robot-gitlab-sync-repo
 
 # Test binary, built with `go test -c`
 *.test

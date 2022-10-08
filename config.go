@@ -1,62 +1,77 @@
 package main
 
-import "github.com/opensourceways/community-robot-lib/config"
+import (
+	"github.com/opensourceways/community-robot-lib/utils"
+
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/mysql"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/obsimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/platformimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
+)
+
+type configValidate interface {
+	Validate() error
+}
+
+type configSetDefault interface {
+	SetDefault()
+}
 
 type configuration struct {
-	ConfigItems []botConfig `json:"config_items,omitempty"`
+	// AccessEndpoint is used to send back the message.
+	AccessEndpoint string              `json:"access_endpoint" required:"true"`
+	AccessHmac     string              `json:"access_hmac"     required:"true"`
+	OBS            obsimpl.Config      `json:"obs"             required:"true"`
+	Sync           sync.Config         `json:"sync"            required:"true"`
+	Mysql          mysql.Config        `json:"mysql"           required:"true"`
+	Gitlab         platformimpl.Config `json:"gitlab"          required:"true"`
 }
 
-func (c *configuration) configFor(org, repo string) *botConfig {
-	if c == nil {
-		return nil
+func (cfg *configuration) configItems() []interface{} {
+	return []interface{}{
+		&cfg.Sync,
+		&cfg.OBS,
+		&cfg.Gitlab,
+		&cfg.Mysql,
 	}
-
-	items := c.ConfigItems
-	v := make([]config.IRepoFilter, len(items))
-	for i := range items {
-		v[i] = &items[i]
-	}
-
-	if i := config.Find(org, repo, v); i >= 0 {
-		return &items[i]
-	}
-
-	return nil
 }
 
-func (c *configuration) Validate() error {
-	if c == nil {
-		return nil
+func (cfg *configuration) Validate() error {
+	if _, err := utils.BuildRequestBody(cfg, ""); err != nil {
+		return err
 	}
 
-	items := c.ConfigItems
-	for i := range items {
-		if err := items[i].validate(); err != nil {
-			return err
+	items := cfg.configItems()
+
+	for _, i := range items {
+		if v, ok := i.(configValidate); ok {
+			if err := v.Validate(); err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func (c *configuration) SetDefault() {
-	if c == nil {
+func (cfg *configuration) SetDefault() {
+	items := cfg.configItems()
+
+	for _, i := range items {
+		if v, ok := i.(configSetDefault); ok {
+			v.SetDefault()
+		}
+	}
+}
+
+func loadConfig(file string) (cfg configuration, err error) {
+	if err = utils.LoadFromYaml(file, &cfg); err != nil {
 		return
 	}
 
-	Items := c.ConfigItems
-	for i := range Items {
-		Items[i].setDefault()
-	}
-}
+	cfg.SetDefault()
 
-type botConfig struct {
-	config.RepoFilter
-}
+	err = cfg.Validate()
 
-func (c *botConfig) setDefault() {
-}
-
-func (c *botConfig) validate() error {
-	return c.RepoFilter.Validate()
+	return
 }
