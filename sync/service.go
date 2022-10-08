@@ -64,8 +64,14 @@ type syncService struct {
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
 	c, err := s.syncRepo.Find(info.Owner, info.RepoType, info.RepoId)
-	if err != nil && !synclock.IsRepoSyncLockNotExist(err) {
-		return err
+	if err != nil {
+		if !synclock.IsRepoSyncLockNotExist(err) {
+			return err
+		}
+
+		c.Owner = info.Owner
+		c.RepoId = info.RepoId
+		c.RepoType = info.RepoType
 	}
 
 	if c.Status != nil && !c.Status.IsDone() {

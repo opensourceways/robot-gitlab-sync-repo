@@ -4,32 +4,16 @@ import (
 	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
 )
 
-type ErrorDuplicateCreating struct {
+type errorRepoNotExists struct {
 	error
 }
 
-func NewErrorDuplicateCreating(err error) ErrorDuplicateCreating {
-	return ErrorDuplicateCreating{err}
-}
-
-type ErrorRepoNotExists struct {
-	error
-}
-
-func NewErrorRepoNotExists(err error) ErrorRepoNotExists {
-	return ErrorRepoNotExists{err}
-}
-
-type ErrorConcurrentUpdating struct {
-	error
-}
-
-func NewErrorConcurrentUpdating(err error) ErrorConcurrentUpdating {
-	return ErrorConcurrentUpdating{err}
+func NewErrorRepoNotExists(err error) errorRepoNotExists {
+	return errorRepoNotExists{err}
 }
 
 func IsRepoSyncLockNotExist(err error) bool {
-	_, ok := err.(ErrorRepoNotExists)
+	_, ok := err.(errorRepoNotExists)
 
 	return ok
 }

@@ -28,14 +28,8 @@ func NewErrorConcurrentUpdating(err error) errorConcurrentUpdating {
 
 func convertError(err error) (out error) {
 	switch err.(type) {
-	case errorDuplicateCreating:
-		out = synclock.NewErrorDuplicateCreating(err)
-
 	case errorDataNotExists:
 		out = synclock.NewErrorRepoNotExists(err)
-
-	case errorConcurrentUpdating:
-		out = synclock.NewErrorConcurrentUpdating(err)
 
 	default:
 		out = err
