@@ -94,15 +94,21 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 
 	// do sync
-	lastCommit, err = s.sync(c.LastCommit, info)
-
-	// update
-	c.Status = domain.RepoSyncStatusDone
-	if err == nil {
+	lastCommit, syncErr := s.sync(c.LastCommit, info)
+	if syncErr == nil {
 		c.LastCommit = lastCommit
-	}
 
-	err1 := utils.Retry(func() error {
+		err := s.h.saveLastCommit(info.repoOBSPath(), lastCommit)
+		if err != nil {
+			s.log.Errorf(
+				"update last commit failed, err:%s",
+				err.Error(),
+			)
+		}
+	}
+	c.Status = domain.RepoSyncStatusDone
+
+	err = utils.Retry(func() error {
 		if _, err := s.lock.Save(&c); err != nil {
 			s.log.Errorf(
 				"save sync repo(%s) failed, err:%s",
@@ -112,14 +118,14 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 
 		return nil
 	})
-	if err1 != nil {
+	if err != nil {
 		s.log.Errorf(
 			"save sync repo(%s) failed, dead lock happened",
 			info.repoOBSPath,
 		)
 	}
 
-	return err
+	return syncErr
 }
 
 func (s *syncService) sync(startCommit string, info *RepoInfo) (last string, err error) {
