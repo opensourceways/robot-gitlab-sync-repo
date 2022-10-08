@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	sdk "github.com/xanzy/go-gitlab"
 
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
 	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
 )
 
@@ -35,22 +36,27 @@ type robot struct {
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 	repoName := e.Project.Name
 
-	repoType := ""
+	var repoType domain.ResourceType
 	if strings.HasPrefix(repoName, "project") {
-		repoType = "project"
+		repoType = domain.ResourceTypeProject
 
 	} else if strings.HasPrefix(repoName, "model") {
-		repoType = "model"
+		repoType = domain.ResourceTypeModel
 
 	} else if strings.HasPrefix(repoName, "dataset") {
-		repoType = "dataset"
+		repoType = domain.ResourceTypeDataset
 
 	} else {
 		return errors.New("unknown repo type")
 	}
 
+	owner, err := domain.NewAccount(e.Project.Namespace)
+	if err != nil {
+		return err
+	}
+
 	v := sync.RepoInfo{
-		Owner:    e.Project.Namespace,
+		Owner:    owner,
 		RepoId:   strconv.Itoa(e.ProjectID),
 		RepoName: repoName,
 		RepoType: repoType,

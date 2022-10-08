@@ -9,8 +9,10 @@ import (
 	framework "github.com/opensourceways/community-robot-lib/robot-gitlab-framework"
 	"github.com/sirupsen/logrus"
 
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/mysql"
 	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/obsimpl"
 	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/platformimpl"
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/synclockimpl"
 	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
 )
 
@@ -48,6 +50,7 @@ func main() {
 		return
 	}
 
+	// gitlab
 	gitlab, err := platformimpl.NewPlatform(&cfg.Gitlab)
 	if err != nil {
 		log.Errorf("init gitlab platform failed, err:%s", err.Error())
@@ -63,9 +66,18 @@ func main() {
 		return
 	}
 
+	// mysql
+	if err := mysql.Init(&cfg.Mysql); err != nil {
+		log.Errorf("init mysql failed, err:%s", err.Error())
+
+		return
+	}
+
+	lock := synclockimpl.NewRepoSyncLock(mysql.NewSyncLockMapper())
+
 	// sync service
 	service := sync.NewSyncService(
-		&cfg.Sync, obsService, nil, gitlab,
+		&cfg.Sync, log, obsService, lock, gitlab,
 	)
 
 	r := newRobot(

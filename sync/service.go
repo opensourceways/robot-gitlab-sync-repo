@@ -7,21 +7,26 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
 	"github.com/opensourceways/robot-gitlab-sync-repo/domain/obs"
 	"github.com/opensourceways/robot-gitlab-sync-repo/domain/platform"
-	"github.com/opensourceways/robot-gitlab-sync-repo/domain/repository"
+	"github.com/opensourceways/robot-gitlab-sync-repo/domain/synclock"
 	"github.com/opensourceways/robot-gitlab-sync-repo/utils"
+	"github.com/sirupsen/logrus"
 )
 
 type RepoInfo struct {
-	Owner    string
+	Owner    domain.Account
 	RepoId   string
-	RepoType string
+	RepoType domain.ResourceType
 	RepoName string
 }
 
 func (s *RepoInfo) repoOBSPath() string {
-	return filepath.Join(s.Owner, s.RepoType, s.RepoId)
+	return filepath.Join(
+		s.Owner.Account(), s.RepoType.ResourceType(),
+		s.RepoId,
+	)
 }
 
 type SyncService interface {
@@ -29,7 +34,9 @@ type SyncService interface {
 }
 
 func NewSyncService(
-	cfg *Config, s obs.OBS, syncRepo repository.RepoSync,
+	cfg *Config, log *logrus.Entry,
+	s obs.OBS,
+	syncRepo synclock.RepoSyncLock,
 	p platform.Platform,
 ) SyncService {
 	return &syncService{
@@ -37,6 +44,7 @@ func NewSyncService(
 			obsService: s,
 			cfg:        cfg.HelperConfig,
 		},
+		log:      log,
 		cfg:      cfg.ServiceConfig,
 		obsutil:  s.OBSUtilPath(),
 		syncRepo: syncRepo,
@@ -46,21 +54,21 @@ func NewSyncService(
 
 type syncService struct {
 	h       *syncHelper
+	log     *logrus.Entry
 	cfg     ServiceConfig
 	obsutil string
 
-	syncRepo repository.RepoSync
+	syncRepo synclock.RepoSyncLock
 	ph       platform.Platform
 }
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
-	// if 404, create in the Find
-	c, err := s.syncRepo.Find(info.Owner, info.RepoId)
-	if err != nil {
+	c, err := s.syncRepo.Find(info.Owner, info.RepoType, info.RepoId)
+	if err != nil && !synclock.IsRepoSyncLockNotExist(err) {
 		return err
 	}
 
-	if c.Status != "" && c.Status != "done" {
+	if c.Status != nil && !c.Status.IsDone() {
 		return errors.New("can't sync")
 	}
 
@@ -73,7 +81,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 		return nil
 	}
 
-	c.Status = "running"
+	c.Status = domain.RepoSyncStatusRunning
 	c, err = s.syncRepo.Save(&c)
 	if err != nil {
 		return err
@@ -83,20 +91,26 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	lastCommit, err = s.sync(info)
 
 	// update
-	c.Status = "done"
+	c.Status = domain.RepoSyncStatusDone
 	if err == nil {
 		c.LastCommit = lastCommit
 	}
 
 	err1 := utils.Retry(func() error {
 		if _, err := s.syncRepo.Save(&c); err != nil {
-			// log
+			s.log.Errorf(
+				"save sync repo(%s) failed, err:%s",
+				info.repoOBSPath, err.Error(),
+			)
 		}
 
 		return nil
 	})
 	if err1 != nil {
-		// dead lock happend for this repo
+		s.log.Errorf(
+			"save sync repo(%s) failed, dead lock happened",
+			info.repoOBSPath,
+		)
 	}
 
 	return err
@@ -157,7 +171,7 @@ func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 
 	v, err, _ := utils.RunCmd(
 		s.cfg.SyncFileShell, workDir,
-		s.ph.GetCloneURL(info.Owner, info.RepoName),
+		s.ph.GetCloneURL(info.Owner.Account(), info.RepoName),
 		info.RepoName, c, s.obsutil, obspath,
 	)
 	if err != nil {

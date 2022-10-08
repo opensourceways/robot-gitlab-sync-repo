@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/opensourceways/community-robot-lib/utils"
 
+	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/mysql"
 	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/obsimpl"
 	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/platformimpl"
 	"github.com/opensourceways/robot-gitlab-sync-repo/sync"
@@ -22,6 +23,7 @@ type configuration struct {
 	AccessHmac     string              `json:"access_hmac"     required:"true"`
 	OBS            obsimpl.Config      `json:"obs"             required:"true"`
 	Sync           sync.Config         `json:"sync"            required:"true"`
+	Mysql          mysql.Config        `json:"mysql"           required:"true"`
 	Gitlab         platformimpl.Config `json:"gitlab"          required:"true"`
 }
 
@@ -30,6 +32,7 @@ func (cfg *configuration) configItems() []interface{} {
 		&cfg.Sync,
 		&cfg.OBS,
 		&cfg.Gitlab,
+		&cfg.Mysql,
 	}
 }
 
