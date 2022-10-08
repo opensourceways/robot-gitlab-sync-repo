@@ -16,7 +16,7 @@ func NewSyncLockMapper() synclockimpl.SyncLockMapper {
 
 type syncLock struct{}
 
-func (rs syncLock) getTable(t string, v RepoSyncLock) interface{} {
+func (rs syncLock) getTable(t string, v *RepoSyncLock) interface{} {
 	switch t {
 	case domain.ResourceTypeProject.ResourceType():
 		return ProjectRepoSyncLock{v}
@@ -34,10 +34,8 @@ func (rs syncLock) getTable(t string, v RepoSyncLock) interface{} {
 
 func (rs syncLock) Insert(do *synclockimpl.RepoSyncLockDO) (string, error) {
 	data := rs.toSyncLockTable(do)
+	table := rs.getTable(do.RepoType, &data)
 
-	table := rs.getTable(do.RepoType, data)
-
-	// TODO: how to match the row
 	r := cli.db.Model(table).Create(table)
 	if r.Error != nil {
 		return "", r.Error
@@ -49,10 +47,7 @@ func (rs syncLock) Insert(do *synclockimpl.RepoSyncLockDO) (string, error) {
 		)
 	}
 
-	// TODO get id
-	// id is not important for the sync lock case
-	// it is just used to indicate whether to insert or update
-	return "id", nil
+	return table.(repoSyncLock).GetId(), nil
 }
 
 func (rs syncLock) Get(owner, repoType, repoId string) (do synclockimpl.RepoSyncLockDO, err error) {
@@ -62,7 +57,7 @@ func (rs syncLock) Get(owner, repoType, repoId string) (do synclockimpl.RepoSync
 	}
 
 	data := new(RepoSyncLock)
-	table := rs.getTable(repoType, RepoSyncLock{})
+	table := rs.getTable(repoType, nil)
 
 	err = cli.db.Model(table).Where(cond).First(data).Error
 
@@ -84,14 +79,13 @@ func (rs syncLock) Update(do *synclockimpl.RepoSyncLockDO) error {
 		Version: do.Version,
 	}
 
-	data := rs.toSyncLockTable(do)
-	table := rs.getTable(do.RepoType, data)
+	table := rs.getTable(do.RepoType, nil)
 
 	tx := cli.db.Model(table).Where(cond).Updates(
 		map[string]interface{}{
 			fieldVersion:    gorm.Expr("? + ?", fieldVersion, 1),
-			fieldLastCommit: data.LastCommit,
-			fieldStatus:     data.Status,
+			fieldLastCommit: do.LastCommit,
+			fieldStatus:     do.Status,
 		},
 	)
 	if tx.Error != nil {
