@@ -52,8 +52,8 @@ func (rs syncLock) Insert(do *synclockimpl.RepoSyncLockDO) (string, error) {
 
 func (rs syncLock) Get(owner, repoType, repoId string) (do synclockimpl.RepoSyncLockDO, err error) {
 	cond := &RepoSyncLock{
-		Owner:  do.Owner,
-		RepoId: do.RepoId,
+		Owner:  owner,
+		RepoId: repoId,
 	}
 
 	data := new(RepoSyncLock)
@@ -94,7 +94,7 @@ func (rs syncLock) Update(do *synclockimpl.RepoSyncLockDO) error {
 
 	if tx.RowsAffected == 0 {
 		return synclockimpl.NewErrorConcurrentUpdating(
-			errors.New("does math any row"),
+			errors.New("no matched record"),
 		)
 	}
 

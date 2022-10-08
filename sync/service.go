@@ -36,19 +36,19 @@ type SyncService interface {
 func NewSyncService(
 	cfg *Config, log *logrus.Entry,
 	s obs.OBS,
-	syncRepo synclock.RepoSyncLock,
 	p platform.Platform,
+	l synclock.RepoSyncLock,
 ) SyncService {
 	return &syncService{
 		h: &syncHelper{
 			obsService: s,
 			cfg:        cfg.HelperConfig,
 		},
-		log:      log,
-		cfg:      cfg.ServiceConfig,
-		obsutil:  s.OBSUtilPath(),
-		syncRepo: syncRepo,
-		ph:       p,
+		log:     log,
+		cfg:     cfg.ServiceConfig,
+		obsutil: s.OBSUtilPath(),
+		lock:    l,
+		ph:      p,
 	}
 }
 
@@ -58,12 +58,12 @@ type syncService struct {
 	cfg     ServiceConfig
 	obsutil string
 
-	syncRepo synclock.RepoSyncLock
-	ph       platform.Platform
+	lock synclock.RepoSyncLock
+	ph   platform.Platform
 }
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
-	c, err := s.syncRepo.Find(info.Owner, info.RepoType, info.RepoId)
+	c, err := s.lock.Find(info.Owner, info.RepoType, info.RepoId)
 	if err != nil {
 		if !synclock.IsRepoSyncLockNotExist(err) {
 			return err
@@ -88,13 +88,13 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 
 	c.Status = domain.RepoSyncStatusRunning
-	c, err = s.syncRepo.Save(&c)
+	c, err = s.lock.Save(&c)
 	if err != nil {
 		return err
 	}
 
 	// do sync
-	lastCommit, err = s.sync(info)
+	lastCommit, err = s.sync(c.LastCommit, info)
 
 	// update
 	c.Status = domain.RepoSyncStatusDone
@@ -103,7 +103,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 
 	err1 := utils.Retry(func() error {
-		if _, err := s.syncRepo.Save(&c); err != nil {
+		if _, err := s.lock.Save(&c); err != nil {
 			s.log.Errorf(
 				"save sync repo(%s) failed, err:%s",
 				info.repoOBSPath, err.Error(),
@@ -122,7 +122,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	return err
 }
 
-func (s *syncService) sync(info *RepoInfo) (last string, err error) {
+func (s *syncService) sync(startCommit string, info *RepoInfo) (last string, err error) {
 	tempDir, err := ioutil.TempDir(s.cfg.WorkDir, "sync")
 	if err != nil {
 		return
@@ -130,18 +130,12 @@ func (s *syncService) sync(info *RepoInfo) (last string, err error) {
 
 	defer os.RemoveAll(tempDir)
 
-	last, lfsFile, err := s.syncFile(tempDir, info)
-	if err != nil {
+	last, lfsFile, err := s.syncFile(tempDir, startCommit, info)
+	if err != nil || lfsFile == "" {
 		return
 	}
 
-	if lfsFile != "" {
-		if err = s.syncLFSFiles(lfsFile, info); err != nil {
-			return
-		}
-	}
-
-	err = s.h.updateCurrentCommit(info.repoOBSPath(), last)
+	err = s.syncLFSFiles(lfsFile, info)
 
 	return
 }
@@ -149,28 +143,18 @@ func (s *syncService) sync(info *RepoInfo) (last string, err error) {
 func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
 	obsPath := info.repoOBSPath()
 
-	return utils.ReadFileLineByLine(lfsFiles, func(line string) bool {
+	return utils.ReadFileLineByLine(lfsFiles, func(line string) error {
 		v := strings.Split(line, ":oid sha256:")
 		dst := filepath.Join(obsPath, v[0])
 
-		if err := s.h.syncLFSFile(v[1], dst); err != nil {
-			return true
-		}
-
-		return false
+		return s.h.syncLFSFile(v[1], dst)
 	})
 }
 
-func (s *syncService) syncFile(workDir string, info *RepoInfo) (
+func (s *syncService) syncFile(workDir, startCommit string, info *RepoInfo) (
 	lastCommit string, lfsFile string, err error,
 ) {
-	p := info.repoOBSPath()
-	c, err := s.h.getCurrentCommit(p)
-	if err != nil {
-		return
-	}
-
-	obspath := s.h.getRepoObsPath(p)
+	obspath := s.h.getRepoObsPath(info.repoOBSPath())
 	if !strings.HasPrefix(obspath, "/") {
 		obspath += "/"
 	}
@@ -178,7 +162,7 @@ func (s *syncService) syncFile(workDir string, info *RepoInfo) (
 	v, err, _ := utils.RunCmd(
 		s.cfg.SyncFileShell, workDir,
 		s.ph.GetCloneURL(info.Owner.Account(), info.RepoName),
-		info.RepoName, c, s.obsutil, obspath,
+		info.RepoName, startCommit, s.obsutil, obspath,
 	)
 	if err != nil {
 		return

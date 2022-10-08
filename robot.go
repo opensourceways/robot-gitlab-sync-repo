@@ -2,10 +2,8 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/opensourceways/community-robot-lib/utils"
 	"github.com/sirupsen/logrus"
@@ -36,18 +34,9 @@ type robot struct {
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 	repoName := e.Project.Name
 
-	var repoType domain.ResourceType
-	if strings.HasPrefix(repoName, "project") {
-		repoType = domain.ResourceTypeProject
-
-	} else if strings.HasPrefix(repoName, "model") {
-		repoType = domain.ResourceTypeModel
-
-	} else if strings.HasPrefix(repoName, "dataset") {
-		repoType = domain.ResourceTypeDataset
-
-	} else {
-		return errors.New("unknown repo type")
+	repoType, err := domain.ParseResourceType(repoName)
+	if err != nil {
+		return err
 	}
 
 	owner, err := domain.NewAccount(e.Project.Namespace)

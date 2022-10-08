@@ -77,7 +77,7 @@ func main() {
 
 	// sync service
 	service := sync.NewSyncService(
-		&cfg.Sync, log, obsService, lock, gitlab,
+		&cfg.Sync, log, obsService, gitlab, lock,
 	)
 
 	r := newRobot(

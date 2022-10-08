@@ -11,12 +11,14 @@ import (
 var cli *mysqlService
 
 func Init(cfg *Config) error {
-	db, err := gorm.Open(gormmysql.New(gormmysql.Config{
+	config := gormmysql.Config{
 		DSN:                       cfg.Conn,
 		DontSupportRenameIndex:    true,
 		DontSupportRenameColumn:   true,
 		SkipInitializeWithVersion: false,
-	}), &gorm.Config{})
+	}
+
+	db, err := gorm.Open(gormmysql.New(config), &gorm.Config{})
 	if err != nil {
 		return err
 	}

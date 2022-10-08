@@ -39,23 +39,21 @@ func (s resourceType) ResourceType() string {
 	return string(s)
 }
 
-// ProjectName
-type ProjectName interface {
-	ProjectName() string
-}
+func ParseResourceType(repoName string) (t ResourceType, err error) {
+	if strings.HasPrefix(repoName, resourceProject) {
+		t = ResourceTypeProject
 
-func NewProjectName(v string) (ProjectName, error) {
-	if v == "" || !strings.HasPrefix(v, resourceProject) {
-		return nil, errors.New("invalid project name")
+	} else if strings.HasPrefix(repoName, resourceModel) {
+		t = ResourceTypeModel
+
+	} else if strings.HasPrefix(repoName, resourceDataset) {
+		t = ResourceTypeDataset
+
+	} else {
+		err = errors.New("unknown repo type")
 	}
 
-	return projectName(v), nil
-}
-
-type projectName string
-
-func (r projectName) ProjectName() string {
-	return string(r)
+	return
 }
 
 // Account
