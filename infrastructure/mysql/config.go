@@ -6,7 +6,7 @@ type Config struct {
 	MaxOpenConns    int    `json:"max_open_conns"`
 	MaxIdleConns    int    `json:"max_idle_conns"`
 
-	ModelTableName   string `json:"model_table_name"    required:"true"`
+	ModelTableName   string `json:"model_table_name"   required:"true"`
 	DatasetTableName string `json:"dataset_table_name" required:"true"`
 }
 
