@@ -1,15 +1,16 @@
 package mysql
 
-import (
-	"strconv"
-
-	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
-)
+import "strconv"
 
 const (
 	fieldStatus     = "status"
 	fieldVersion    = "version"
 	fieldLastCommit = "last_commit"
+)
+
+var (
+	modelTableName   = ""
+	datasetTableName = ""
 )
 
 type repoSyncLock interface {
@@ -25,24 +26,12 @@ type RepoSyncLock struct {
 	LastCommit string `json:"last_commit"  gorm:"column:last_commit"`
 }
 
-type ProjectRepoSyncLock struct {
-	*RepoSyncLock `gorm:"embedded"`
-}
-
-func (r *ProjectRepoSyncLock) TableName() string {
-	return domain.ResourceTypeProject.ResourceType()
-}
-
-func (r *ProjectRepoSyncLock) GetId() string {
-	return strconv.Itoa(r.Id)
-}
-
 type ModelRepoSyncLock struct {
 	*RepoSyncLock `gorm:"embedded"`
 }
 
 func (r *ModelRepoSyncLock) TableName() string {
-	return domain.ResourceTypeModel.ResourceType()
+	return modelTableName
 }
 
 func (r *ModelRepoSyncLock) GetId() string {
@@ -54,7 +43,7 @@ type DatasetRepoSyncLock struct {
 }
 
 func (r *DatasetRepoSyncLock) TableName() string {
-	return domain.ResourceTypeDataset.ResourceType()
+	return datasetTableName
 }
 
 func (r *DatasetRepoSyncLock) GetId() string {

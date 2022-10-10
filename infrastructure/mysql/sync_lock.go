@@ -18,9 +18,6 @@ type syncLock struct{}
 
 func (rs syncLock) getTable(t string, v *RepoSyncLock) interface{} {
 	switch t {
-	case domain.ResourceTypeProject.ResourceType():
-		return ProjectRepoSyncLock{v}
-
 	case domain.ResourceTypeModel.ResourceType():
 		return ModelRepoSyncLock{v}
 

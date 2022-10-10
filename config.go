@@ -36,7 +36,7 @@ func (cfg *configuration) configItems() []interface{} {
 	}
 }
 
-func (cfg *configuration) Validate() error {
+func (cfg *configuration) validate() error {
 	if _, err := utils.BuildRequestBody(cfg, ""); err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (cfg *configuration) Validate() error {
 	return nil
 }
 
-func (cfg *configuration) SetDefault() {
+func (cfg *configuration) setDefault() {
 	items := cfg.configItems()
 
 	for _, i := range items {
@@ -69,9 +69,9 @@ func loadConfig(file string) (cfg configuration, err error) {
 		return
 	}
 
-	cfg.SetDefault()
+	cfg.setDefault()
 
-	err = cfg.Validate()
+	err = cfg.validate()
 
 	return
 }

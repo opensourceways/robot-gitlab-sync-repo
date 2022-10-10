@@ -15,6 +15,13 @@ start_commit=$4
 obsutil=$5 # the path of obsutil
 obspath=$6 # obspath should has suffix of /
 
+v=0
+case $obspath in */)
+    v=1
+esac
+test $v -eq 0 && obspath="${obspath}/"
+
+
 test -d $work_dir || mkdir -p $work_dir
 cd $work_dir
 

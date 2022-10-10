@@ -36,6 +36,9 @@ func Init(cfg *Config) error {
 		db: db,
 	}
 
+	modelTableName = cfg.ModelTableName
+	datasetTableName = cfg.DatasetTableName
+
 	return nil
 }
 

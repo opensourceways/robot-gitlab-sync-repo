@@ -87,6 +87,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 		return nil
 	}
 
+	// try lock
 	c.Status = domain.RepoSyncStatusRunning
 	c, err = s.lock.Save(&c)
 	if err != nil {
@@ -108,15 +109,17 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 	c.Status = domain.RepoSyncStatusDone
 
+	// unlock
 	err = utils.Retry(func() error {
-		if _, err := s.lock.Save(&c); err != nil {
+		_, err := s.lock.Save(&c)
+		if err != nil {
 			s.log.Errorf(
 				"save sync repo(%s) failed, err:%s",
 				info.repoOBSPath, err.Error(),
 			)
 		}
 
-		return nil
+		return err
 	})
 	if err != nil {
 		s.log.Errorf(
@@ -160,15 +163,11 @@ func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
 func (s *syncService) syncFile(workDir, startCommit string, info *RepoInfo) (
 	lastCommit string, lfsFile string, err error,
 ) {
-	obspath := s.h.getRepoObsPath(info.repoOBSPath())
-	if !strings.HasPrefix(obspath, "/") {
-		obspath += "/"
-	}
-
 	v, err, _ := utils.RunCmd(
 		s.cfg.SyncFileShell, workDir,
 		s.ph.GetCloneURL(info.Owner.Account(), info.RepoName),
-		info.RepoName, startCommit, s.obsutil, obspath,
+		info.RepoName, startCommit, s.obsutil,
+		s.h.getRepoObsPath(info.repoOBSPath()),
 	)
 	if err != nil {
 		return
