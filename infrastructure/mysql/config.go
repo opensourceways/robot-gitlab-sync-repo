@@ -5,6 +5,9 @@ type Config struct {
 	ConnMaxLifetime int    `json:"conn_max_life_time"`
 	MaxOpenConns    int    `json:"max_open_conns"`
 	MaxIdleConns    int    `json:"max_idle_conns"`
+
+	ModelTableName   string `json:"model_table_nam"    required:"true"`
+	DatasetTableName string `json:"dataset_table_name" required:"true"`
 }
 
 func (cfg *Config) SetDefault() {
