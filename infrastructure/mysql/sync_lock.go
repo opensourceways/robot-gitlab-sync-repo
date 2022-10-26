@@ -59,7 +59,7 @@ func (rs syncLock) Get(owner, repoType, repoId string) (do synclockimpl.RepoSync
 	err = cli.db.Model(table).Where(cond).First(data).Error
 
 	if err == nil {
-		do = rs.toSyncLockDo(data)
+		do = rs.toSyncLockDo(data, repoType)
 	} else {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = synclockimpl.NewErrorDataNotExists(err)
@@ -108,13 +108,14 @@ func (rs syncLock) toSyncLockTable(do *synclockimpl.RepoSyncLockDO) RepoSyncLock
 	}
 }
 
-func (rs syncLock) toSyncLockDo(data *RepoSyncLock) synclockimpl.RepoSyncLockDO {
+func (rs syncLock) toSyncLockDo(data *RepoSyncLock, repoType string) synclockimpl.RepoSyncLockDO {
 	return synclockimpl.RepoSyncLockDO{
 		Id:         strconv.Itoa(data.Id),
 		Owner:      data.Owner,
 		RepoId:     data.RepoId,
 		Status:     data.Status,
 		Version:    data.Version,
+		RepoType:   repoType,
 		LastCommit: data.LastCommit,
 	}
 }

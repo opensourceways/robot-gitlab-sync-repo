@@ -75,6 +75,8 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 
 	if c.Status != nil && !c.Status.IsDone() {
+		// TODO: mybe dead lock, try to unlock it and continue
+
 		return errors.New("can't sync")
 	}
 
@@ -95,17 +97,9 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 
 	// do sync
-	lastCommit, syncErr := s.sync(c.LastCommit, info)
+	lastCommit, syncErr := s.doSync(c.LastCommit, info)
 	if syncErr == nil {
 		c.LastCommit = lastCommit
-
-		err := s.h.saveLastCommit(info.repoOBSPath(), lastCommit)
-		if err != nil {
-			s.log.Errorf(
-				"update last commit failed, err:%s",
-				err.Error(),
-			)
-		}
 	}
 	c.Status = domain.RepoSyncStatusDone
 
@@ -129,6 +123,26 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	}
 
 	return syncErr
+}
+
+func (s *syncService) doSync(startCommit string, info *RepoInfo) (lastCommit string, err error) {
+	if lastCommit, err = s.sync(startCommit, info); err != nil {
+		return
+	}
+
+	err = s.h.saveLastCommit(info.repoOBSPath(), lastCommit)
+	if err != nil {
+		s.log.Errorf(
+			"update last commit failed, err:%s",
+			err.Error(),
+		)
+
+		err = errors.New(
+			"sync successfully , but save last commit to obs failed",
+		)
+	}
+
+	return
 }
 
 func (s *syncService) sync(startCommit string, info *RepoInfo) (last string, err error) {
