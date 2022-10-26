@@ -2,6 +2,7 @@ package sync
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -39,7 +40,7 @@ func NewSyncService(
 	p platform.Platform,
 	l synclock.RepoSyncLock,
 ) (SyncService, error) {
-	if err := os.Mkdir(cfg.WorkDir, 0644); err != nil {
+	if err := os.Mkdir(cfg.WorkDir, 0755); err != nil {
 		return nil, err
 	}
 
@@ -181,13 +182,21 @@ func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
 func (s *syncService) syncFile(workDir, startCommit string, info *RepoInfo) (
 	lastCommit string, lfsFile string, err error,
 ) {
-	v, err, _ := utils.RunCmd(
-		s.cfg.SyncFileShell, workDir,
+	params := []string{
+		s.cfg.SyncFileShell,
+		workDir,
 		s.ph.GetCloneURL(info.Owner.Account(), info.RepoName),
 		info.RepoName, startCommit, s.obsutil,
 		s.h.getRepoObsPath(info.repoOBSPath()),
-	)
+	}
+
+	v, err, _ := utils.RunCmd(params...)
 	if err != nil {
+		err = fmt.Errorf(
+			"run sync shell, err=%s, params=%v",
+			err.Error(), params,
+		)
+
 		return
 	}
 
