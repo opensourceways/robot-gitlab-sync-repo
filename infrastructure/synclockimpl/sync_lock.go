@@ -74,9 +74,9 @@ type RepoSyncLockDO struct {
 	Id         string
 	Owner      string
 	RepoId     string
+	Status     string
 	RepoType   string
 	LastCommit string
-	Status     string
 	Version    int
 }
 
