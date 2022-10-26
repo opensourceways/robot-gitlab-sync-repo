@@ -162,6 +162,10 @@ func (s *syncService) sync(startCommit string, info *RepoInfo) (last string, err
 	defer os.RemoveAll(tempDir)
 
 	last, lfsFile, err := s.syncFile(tempDir, startCommit, info)
+	s.log.Debugf(
+		"sync file for repo:%s, last commit=%s, lfsFile=%s",
+		info.repoOBSPath(), last, lfsFile,
+	)
 	if err != nil || lfsFile == "" {
 		return
 	}
@@ -205,6 +209,11 @@ func (s *syncService) syncFile(workDir, startCommit string, info *RepoInfo) (
 
 		return
 	}
+
+	s.log.Debugf(
+		"sync file for repo: %s, the result for sync shell is: %s",
+		info.repoOBSPath(), v,
+	)
 
 	r := strings.Split(string(v), ", ")
 	lastCommit = r[0]
