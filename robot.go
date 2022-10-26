@@ -31,17 +31,17 @@ type robot struct {
 	service  sync.SyncService
 }
 
-func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
+func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) (err error) {
 	repoName := e.Project.Name
 
 	repoType, err := domain.ParseResourceType(repoName)
 	if err != nil {
-		return err
+		return
 	}
 
 	owner, err := domain.NewAccount(e.Project.Namespace)
 	if err != nil {
-		return err
+		return
 	}
 
 	v := sync.RepoInfo{
@@ -51,11 +51,18 @@ func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) error {
 		RepoType: repoType,
 	}
 
-	if err := bot.service.SyncRepo(&v); err == nil {
-		return nil
+	if err = bot.service.SyncRepo(&v); err == nil {
+		return
 	}
 
-	return bot.sendBack(e)
+	if err1 := bot.sendBack(e); err1 != nil {
+		log.Errorf(
+			"sync repo failed and send back event failed, err:%s.",
+			err1.Error(),
+		)
+	}
+
+	return
 }
 
 func (bot *robot) sendBack(e *sdk.PushEvent) error {
