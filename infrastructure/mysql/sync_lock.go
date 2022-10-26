@@ -80,7 +80,7 @@ func (rs syncLock) Update(do *synclockimpl.RepoSyncLockDO) error {
 
 	tx := cli.db.Model(table).Where(cond).Updates(
 		map[string]interface{}{
-			fieldVersion:    gorm.Expr("? + ?", fieldVersion, 1),
+			fieldVersion:    gorm.Expr(fieldVersion+" + ?", 1),
 			fieldLastCommit: do.LastCommit,
 			fieldStatus:     do.Status,
 		},

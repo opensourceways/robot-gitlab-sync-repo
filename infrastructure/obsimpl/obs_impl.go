@@ -87,3 +87,7 @@ func (s *obsImpl) GetObject(path string) ([]byte, error) {
 func (s *obsImpl) OBSUtilPath() string {
 	return s.obsutil
 }
+
+func (s *obsImpl) OBSBucket() string {
+	return s.bucket
+}

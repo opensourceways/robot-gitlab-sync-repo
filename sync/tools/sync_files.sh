@@ -11,9 +11,12 @@ echo_message() {
 work_dir=$1
 repo_url=$2
 repo_name=$3
-start_commit=$4
-obsutil=$5 # the path of obsutil
-obspath=$6 # obspath should has suffix of /
+obsutil=$4 # the path of obsutil
+obspath="obs://$5/$6" # obspath should has suffix of /. $5 is obs bucket. $6 is the object path.
+start_commit="" # start_commit may be empty
+if [ $# -eq 7 ]; then
+    start_commit=$7
+fi
 
 v=0
 case $obspath in */)
@@ -58,7 +61,8 @@ deleted_files=${file_prefix}_deleted
 while read line
 do
     if [ -e "$line" ]; then
-        sha=$(sed -n '/^oid sha256:.\{64\}$/p' $line)
+        # line maybe include Chinese, quote it.
+        sha=$(sed -n '/^oid sha256:.\{64\}$/p' "$line")
         if [ -n "$sha" ]; then
             echo "$line:$sha" >> $lfs_files
         else
@@ -68,6 +72,13 @@ do
         echo $line >> $deleted_files
     fi
 done < $all_files
+
+inSmallFiles() {
+    local key=$1
+
+    # grep will exit with 1 when it can't find anything
+    echo $(grep -Fx "$key" $small_files)
+}
 
 # handle small files
 if [ -s $small_files ]; then
@@ -84,7 +95,7 @@ if [ -s $small_files ]; then
 
         while read line
         do
-            if [ -z $(grep -Fx "$line" $small_files) ]; then
+            if [ -z "$(inSmallFiles "$line")" ]; then
                 rm $line
             fi
         done < $all_files

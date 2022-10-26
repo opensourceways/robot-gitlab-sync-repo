@@ -5,4 +5,5 @@ type OBS interface {
 	GetObject(path string) ([]byte, error)
 	CopyObject(dst, src string) error
 	OBSUtilPath() string
+	OBSBucket() string
 }
