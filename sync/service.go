@@ -49,19 +49,22 @@ func NewSyncService(
 			obsService: s,
 			cfg:        cfg.HelperConfig,
 		},
-		log:     log,
-		cfg:     cfg.ServiceConfig,
-		obsutil: s.OBSUtilPath(),
-		lock:    l,
-		ph:      p,
+		log:       log,
+		cfg:       cfg.ServiceConfig,
+		lock:      l,
+		ph:        p,
+		obsutil:   s.OBSUtilPath(),
+		obsBucket: s.OBSBucket(),
 	}, nil
 }
 
 type syncService struct {
-	h       *syncHelper
-	log     *logrus.Entry
-	cfg     ServiceConfig
-	obsutil string
+	h   *syncHelper
+	log *logrus.Entry
+	cfg ServiceConfig
+
+	obsutil   string
+	obsBucket string
 
 	lock synclock.RepoSyncLock
 	ph   platform.Platform
@@ -186,8 +189,9 @@ func (s *syncService) syncFile(workDir, startCommit string, info *RepoInfo) (
 		s.cfg.SyncFileShell,
 		workDir,
 		s.ph.GetCloneURL(info.Owner.Account(), info.RepoName),
-		info.RepoName, startCommit, s.obsutil,
+		info.RepoName, s.obsutil, s.obsBucket,
 		s.h.getRepoObsPath(info.repoOBSPath()),
+		startCommit,
 	}
 
 	v, err, _ := utils.RunCmd(params...)
