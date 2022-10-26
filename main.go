@@ -76,9 +76,14 @@ func main() {
 	lock := synclockimpl.NewRepoSyncLock(mysql.NewSyncLockMapper())
 
 	// sync service
-	service := sync.NewSyncService(
+	service, err := sync.NewSyncService(
 		&cfg.Sync, log, obsService, gitlab, lock,
 	)
+	if err != nil {
+		log.Errorf("init sync service failed, err:%s", err.Error())
+
+		return
+	}
 
 	r := newRobot(
 		cfg.AccessHmac, cfg.AccessEndpoint, service,

@@ -38,7 +38,11 @@ func NewSyncService(
 	s obs.OBS,
 	p platform.Platform,
 	l synclock.RepoSyncLock,
-) SyncService {
+) (SyncService, error) {
+	if err := os.Mkdir(cfg.WorkDir, 0644); err != nil {
+		return nil, err
+	}
+
 	return &syncService{
 		h: &syncHelper{
 			obsService: s,
@@ -49,7 +53,7 @@ func NewSyncService(
 		obsutil: s.OBSUtilPath(),
 		lock:    l,
 		ph:      p,
-	}
+	}, nil
 }
 
 type syncService struct {
@@ -108,8 +112,8 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 		_, err := s.lock.Save(&c)
 		if err != nil {
 			s.log.Errorf(
-				"save sync repo(%s) failed, err:%s",
-				info.repoOBSPath, err.Error(),
+				"save sync repo(%s) failed, err:%s, value=%v",
+				info.repoOBSPath(), err.Error(), c,
 			)
 		}
 
@@ -118,7 +122,7 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 	if err != nil {
 		s.log.Errorf(
 			"save sync repo(%s) failed, dead lock happened",
-			info.repoOBSPath,
+			info.repoOBSPath(),
 		)
 	}
 
