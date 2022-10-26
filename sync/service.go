@@ -178,6 +178,8 @@ func (s *syncService) syncLFSFiles(lfsFiles string, info *RepoInfo) error {
 		v := strings.Split(line, ":oid sha256:")
 		dst := filepath.Join(obsPath, v[0])
 
+		s.log.Debugf("save lfs %s to %s", v[1], dst)
+
 		return s.h.syncLFSFile(v[1], dst)
 	})
 }
