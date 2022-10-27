@@ -24,7 +24,6 @@ case $obspath in */)
 esac
 test $v -eq 0 && obspath="${obspath}/"
 
-
 test -d $work_dir || mkdir -p $work_dir
 cd $work_dir
 
