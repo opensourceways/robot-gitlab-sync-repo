@@ -218,7 +218,7 @@ func (s *syncService) syncFile(workDir, startCommit string, info *RepoInfo) (
 	r := strings.Split(string(v), ", ")
 	lastCommit = r[0]
 
-	if r[2] == "yes" {
+	if strings.HasPrefix(r[2], "yes") {
 		lfsFile = r[1]
 	}
 
