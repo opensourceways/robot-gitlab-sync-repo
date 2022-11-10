@@ -8,7 +8,7 @@ import (
 type SyncLockMapper interface {
 	Insert(*RepoSyncLockDO) (string, error)
 	Update(*RepoSyncLockDO) error
-	Get(string, string, string) (RepoSyncLockDO, error)
+	Get(string, string) (RepoSyncLockDO, error)
 }
 
 func NewRepoSyncLock(mapper SyncLockMapper) synclock.RepoSyncLock {
@@ -44,11 +44,10 @@ func (impl syncLock) Save(p *domain.RepoSyncLock) (r domain.RepoSyncLock, err er
 	return
 }
 
-func (impl syncLock) Find(
-	owner domain.Account,
-	repoType domain.ResourceType, repoId string,
-) (r domain.RepoSyncLock, err error) {
-	v, err := impl.mapper.Get(owner.Account(), repoType.ResourceType(), repoId)
+func (impl syncLock) Find(owner domain.Account, repoId string) (
+	r domain.RepoSyncLock, err error,
+) {
+	v, err := impl.mapper.Get(owner.Account(), repoId)
 	if err != nil {
 		err = convertError(err)
 	} else {
@@ -63,7 +62,6 @@ func (impl syncLock) toRepoSyncLockDO(p *domain.RepoSyncLock) RepoSyncLockDO {
 		Id:         p.Id,
 		Owner:      p.Owner.Account(),
 		RepoId:     p.RepoId,
-		RepoType:   p.RepoType.ResourceType(),
 		LastCommit: p.LastCommit,
 		Status:     p.Status.RepoSyncStatus(),
 		Version:    p.Version,
@@ -87,10 +85,6 @@ func (do *RepoSyncLockDO) toSyncLock(r *domain.RepoSyncLock) (err error) {
 	r.LastCommit = do.LastCommit
 
 	if r.Owner, err = domain.NewAccount(do.Owner); err != nil {
-		return
-	}
-
-	if r.RepoType, err = domain.NewResourceType(do.RepoType); err != nil {
 		return
 	}
 

@@ -19,15 +19,11 @@ import (
 type RepoInfo struct {
 	Owner    domain.Account
 	RepoId   string
-	RepoType domain.ResourceType
 	RepoName string
 }
 
 func (s *RepoInfo) repoOBSPath() string {
-	return filepath.Join(
-		s.Owner.Account(), s.RepoType.ResourceType(),
-		s.RepoId,
-	)
+	return filepath.Join(s.Owner.Account(), s.RepoId)
 }
 
 type SyncService interface {
@@ -71,7 +67,7 @@ type syncService struct {
 }
 
 func (s *syncService) SyncRepo(info *RepoInfo) error {
-	c, err := s.lock.Find(info.Owner, info.RepoType, info.RepoId)
+	c, err := s.lock.Find(info.Owner, info.RepoId)
 	if err != nil {
 		if !synclock.IsRepoSyncLockNotExist(err) {
 			return err
@@ -79,7 +75,6 @@ func (s *syncService) SyncRepo(info *RepoInfo) error {
 
 		c.Owner = info.Owner
 		c.RepoId = info.RepoId
-		c.RepoType = info.RepoType
 	}
 
 	if c.Status != nil && !c.Status.IsDone() {
