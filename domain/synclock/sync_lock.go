@@ -19,10 +19,6 @@ func IsRepoSyncLockNotExist(err error) bool {
 }
 
 type RepoSyncLock interface {
-	Find(
-		owner domain.Account,
-		repoType domain.ResourceType, repoId string,
-	) (domain.RepoSyncLock, error)
-
+	Find(owner domain.Account, repoId string) (domain.RepoSyncLock, error)
 	Save(*domain.RepoSyncLock) (domain.RepoSyncLock, error)
 }

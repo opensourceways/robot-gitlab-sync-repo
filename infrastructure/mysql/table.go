@@ -1,21 +1,12 @@
 package mysql
 
-import "strconv"
-
 const (
 	fieldStatus     = "status"
 	fieldVersion    = "version"
 	fieldLastCommit = "last_commit"
 )
 
-var (
-	modelTableName   = ""
-	datasetTableName = ""
-)
-
-type repoSyncLock interface {
-	GetId() string
-}
+var tableName = ""
 
 type RepoSyncLock struct {
 	Id         int    `json:"-"            gorm:"column:id"`
@@ -26,26 +17,6 @@ type RepoSyncLock struct {
 	LastCommit string `json:"last_commit"  gorm:"column:last_commit"`
 }
 
-type ModelRepoSyncLock struct {
-	*RepoSyncLock `gorm:"embedded"`
-}
-
-func (r *ModelRepoSyncLock) TableName() string {
-	return modelTableName
-}
-
-func (r *ModelRepoSyncLock) GetId() string {
-	return strconv.Itoa(r.Id)
-}
-
-type DatasetRepoSyncLock struct {
-	*RepoSyncLock `gorm:"embedded"`
-}
-
-func (r *DatasetRepoSyncLock) TableName() string {
-	return datasetTableName
-}
-
-func (r *DatasetRepoSyncLock) GetId() string {
-	return strconv.Itoa(r.Id)
+func (r *RepoSyncLock) TableName() string {
+	return tableName
 }

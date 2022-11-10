@@ -34,11 +34,6 @@ type robot struct {
 func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) (err error) {
 	repoName := e.Project.Name
 
-	repoType, err := domain.ParseResourceType(repoName)
-	if err != nil {
-		return
-	}
-
 	owner, err := domain.NewAccount(e.Project.Namespace)
 	if err != nil {
 		return
@@ -48,7 +43,6 @@ func (bot *robot) HandlePushEvent(e *sdk.PushEvent, log *logrus.Entry) (err erro
 		Owner:    owner,
 		RepoId:   strconv.Itoa(e.ProjectID),
 		RepoName: repoName,
-		RepoType: repoType,
 	}
 
 	if err = bot.service.SyncRepo(&v); err == nil {

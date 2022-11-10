@@ -46,6 +46,5 @@ type RepoSyncLock struct {
 	RepoId     string
 	Status     RepoSyncStatus
 	Version    int
-	RepoType   ResourceType
 	LastCommit string
 }

@@ -6,7 +6,6 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/opensourceways/robot-gitlab-sync-repo/domain"
 	"github.com/opensourceways/robot-gitlab-sync-repo/infrastructure/synclockimpl"
 )
 
@@ -16,24 +15,10 @@ func NewSyncLockMapper() synclockimpl.SyncLockMapper {
 
 type syncLock struct{}
 
-func (rs syncLock) getTable(t string, v *RepoSyncLock) interface{} {
-	switch t {
-	case domain.ResourceTypeModel.ResourceType():
-		return &ModelRepoSyncLock{v}
-
-	case domain.ResourceTypeDataset.ResourceType():
-		return &DatasetRepoSyncLock{v}
-
-	default:
-		return nil
-	}
-}
-
 func (rs syncLock) Insert(do *synclockimpl.RepoSyncLockDO) (string, error) {
-	data := rs.toSyncLockTable(do)
-	table := rs.getTable(do.RepoType, &data)
+	table := rs.toSyncLockTable(do)
 
-	r := cli.db.Model(table).Create(table)
+	r := cli.db.Model(&table).Create(&table)
 	if r.Error != nil {
 		return "", r.Error
 	}
@@ -44,22 +29,21 @@ func (rs syncLock) Insert(do *synclockimpl.RepoSyncLockDO) (string, error) {
 		)
 	}
 
-	return table.(repoSyncLock).GetId(), nil
+	return strconv.Itoa(table.Id), nil
 }
 
-func (rs syncLock) Get(owner, repoType, repoId string) (do synclockimpl.RepoSyncLockDO, err error) {
+func (rs syncLock) Get(owner, repoId string) (do synclockimpl.RepoSyncLockDO, err error) {
 	cond := &RepoSyncLock{
 		Owner:  owner,
 		RepoId: repoId,
 	}
 
 	data := new(RepoSyncLock)
-	table := rs.getTable(repoType, nil)
 
-	err = cli.db.Model(table).Where(cond).First(data).Error
+	err = cli.db.Model(data).Where(cond).First(data).Error
 
 	if err == nil {
-		do = rs.toSyncLockDo(data, repoType)
+		do = rs.toSyncLockDo(data)
 	} else {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = synclockimpl.NewErrorDataNotExists(err)
@@ -76,9 +60,7 @@ func (rs syncLock) Update(do *synclockimpl.RepoSyncLockDO) error {
 		Version: do.Version,
 	}
 
-	table := rs.getTable(do.RepoType, nil)
-
-	tx := cli.db.Model(table).Where(cond).Updates(
+	tx := cli.db.Model(cond).Where(cond).Updates(
 		map[string]interface{}{
 			fieldVersion:    gorm.Expr(fieldVersion+" + ?", 1),
 			fieldLastCommit: do.LastCommit,
@@ -108,14 +90,13 @@ func (rs syncLock) toSyncLockTable(do *synclockimpl.RepoSyncLockDO) RepoSyncLock
 	}
 }
 
-func (rs syncLock) toSyncLockDo(data *RepoSyncLock, repoType string) synclockimpl.RepoSyncLockDO {
+func (rs syncLock) toSyncLockDo(data *RepoSyncLock) synclockimpl.RepoSyncLockDO {
 	return synclockimpl.RepoSyncLockDO{
 		Id:         strconv.Itoa(data.Id),
 		Owner:      data.Owner,
 		RepoId:     data.RepoId,
 		Status:     data.Status,
 		Version:    data.Version,
-		RepoType:   repoType,
 		LastCommit: data.LastCommit,
 	}
 }
